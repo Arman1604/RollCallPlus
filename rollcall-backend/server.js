@@ -47,7 +47,7 @@ function makeFullUrl(src) {
 
 function cleanValue(value) {
   if (!value) return "Not Available";
-  const cleaned = value.replace(/\s+/g, " ").replace(/^:/, "").trim();
+  const cleaned = String(value).replace(/\s+/g, " ").replace(/^:/, "").trim();
   return cleaned || "Not Available";
 }
 
@@ -181,17 +181,26 @@ function findResultBaseUrl(dashboardPage) {
 async function findFinalResultUrl(client, dashboardPage) {
   const baseResultUrl = findResultBaseUrl(dashboardPage);
 
+  console.log("BASE RESULT URL:", baseResultUrl);
+
   const firstResponse = await client.get(baseResultUrl);
   const firstPage = cheerio.load(firstResponse.data);
 
   const classCode =
-    firstPage("select#ClassCode option")
-      .filter((i, el) => firstPage(el).attr("value") !== "-1")
+    firstPage("select#ClassCode option, select[name='ClassCode'] option")
+      .filter((i, el) => {
+        const value = firstPage(el).attr("value");
+        return value && value !== "-1";
+      })
       .first()
       .attr("value") || "";
 
+  console.log("FIRST CLASSCODE FOUND:", classCode || "NONE");
+
   if (classCode) {
-    return `${BASE_URL}/DashBoardStudent/Results?ClassCode=${classCode}`;
+    return `${BASE_URL}/DashBoardStudent/Results?ClassCode=${encodeURIComponent(
+      classCode
+    )}`;
   }
 
   return baseResultUrl;
@@ -227,16 +236,18 @@ function extractResultFromPage($) {
     }
 
     if (joined.includes("sgpa")) {
-      const sgpaMatch = joined.match(/sgpa\s*([0-9]+(?:\.[0-9]+)?)/i);
+      const sgpaMatch = joined.match(/sgpa\s*:?[\s-]*([0-9]+(?:\.[0-9]+)?)/i);
       if (sgpaMatch) sgpa = sgpaMatch[1];
 
       const creditMatch = joined.match(
-        /credit[s]?\s*earned\s*([0-9]+(?:\.[0-9]+)?)/i
+        /credit[s]?\s*earned\s*:?[\s-]*([0-9]+(?:\.[0-9]+)?)/i
       );
       if (creditMatch) creditsEarned = creditMatch[1];
 
       if (joined.includes("pass")) resultStatus = "PASS";
       if (joined.includes("fail")) resultStatus = "FAIL";
+      if (joined.includes("reappear")) resultStatus = "REAPPEAR";
+
       return;
     }
 
@@ -278,37 +289,139 @@ function extractResultFromPage($) {
   };
 }
 
-async function scrapeResult(client, dashboardPage) {
-  const resultUrl = await findFinalResultUrl(client, dashboardPage);
-  console.log("FINAL RESULT URL:", resultUrl);
+function getClassOptions($) {
+  const classOptions = [];
 
-  const resultResponse = await client.get(resultUrl);
+  $("select#ClassCode option, select[name='ClassCode'] option").each(
+    (index, option) => {
+      const value = $(option).attr("value");
+      const text = $(option).text().trim();
+
+      if (
+        value &&
+        value !== "-1" &&
+        text &&
+        !text.toLowerCase().includes("select")
+      ) {
+        classOptions.push({
+          value,
+          semester: text || `Semester ${index}`,
+          selected: $(option).is(":selected"),
+        });
+      }
+    }
+  );
+
+  return classOptions;
+}
+
+function logDropdowns($) {
+  $("select").each((i, select) => {
+    console.log("SELECT FOUND:", {
+      index: i,
+      id: $(select).attr("id") || "",
+      name: $(select).attr("name") || "",
+    });
+
+    $(select)
+      .find("option")
+      .each((j, option) => {
+        console.log("OPTION FOUND:", {
+          selectIndex: i,
+          optionIndex: j,
+          value: $(option).attr("value") || "",
+          text: $(option).text().trim(),
+        });
+      });
+  });
+}
+
+async function scrapeResult(client, dashboardPage) {
+  console.log("SCRAPE RESULT FUNCTION STARTED");
+  const baseResultUrl = findResultBaseUrl(dashboardPage);
+
+  console.log("BASE RESULT URL:", baseResultUrl);
+
+  const resultResponse = await client.get(baseResultUrl);
   const $ = cheerio.load(resultResponse.data);
 
-  const resultData = extractResultFromPage($);
+  logDropdowns($);
 
-  if (resultData.sgpa === "0" && resultData.subjects.length > 0) {
+  const classOptions = getClassOptions($);
+
+  console.log("CLASS OPTIONS FOUND:", JSON.stringify(classOptions, null, 2));
+
+  if (classOptions.length === 0) {
+    const singleResult = extractResultFromPage($);
+
+    if (singleResult.sgpa === "0" && singleResult.subjects.length === 0) {
+      throw new Error("Result dropdown not found and result table empty");
+    }
+
     return {
       available: true,
-      message: "Result published but SGPA not declared due to reappear/detention",
-      sgpa: "Not Declared",
-      creditsEarned: resultData.creditsEarned,
-      resultStatus: "REAPPEAR / PENDING",
-      subjects: resultData.subjects,
+      current: {
+        semester: "Current Semester",
+        ...singleResult,
+      },
+      results: [
+        {
+          semester: "Current Semester",
+          ...singleResult,
+        },
+      ],
     };
   }
 
-  if (resultData.sgpa === "0" && resultData.subjects.length === 0) {
+  const results = [];
+
+  for (const item of classOptions) {
+    try {
+      const semUrl = `${BASE_URL}/DashBoardStudent/Results?ClassCode=${encodeURIComponent(
+        item.value
+      )}`;
+
+      console.log("SCRAPING SEMESTER:", item.semester, semUrl);
+
+      const semResponse = await client.get(semUrl);
+      const semPage = cheerio.load(semResponse.data);
+      const semResult = extractResultFromPage(semPage);
+
+      console.log("SEMESTER RESULT:", {
+        semester: item.semester,
+        sgpa: semResult.sgpa,
+        subjects: semResult.subjects.length,
+      });
+
+      if (semResult.sgpa !== "0" || semResult.subjects.length > 0) {
+        results.push({
+          semester: item.semester,
+          selected: item.selected,
+          sgpa:
+            semResult.sgpa === "0" && semResult.subjects.length > 0
+              ? "Not Declared"
+              : semResult.sgpa,
+          creditsEarned: semResult.creditsEarned,
+          resultStatus:
+            semResult.sgpa === "0" && semResult.subjects.length > 0
+              ? "REAPPEAR / PENDING"
+              : semResult.resultStatus,
+          subjects: semResult.subjects,
+        });
+      }
+    } catch (error) {
+      console.log(`Semester scrape failed for ${item.semester}:`, error.message);
+    }
+  }
+
+  if (results.length === 0) {
     throw new Error("Result not available");
   }
 
   return {
     available: true,
-    message: "Result fetched successfully",
-    sgpa: resultData.sgpa,
-    creditsEarned: resultData.creditsEarned,
-    resultStatus: resultData.resultStatus,
-    subjects: resultData.subjects,
+    current: results.find((item) => item.selected) || results[0],
+    results,
   };
 }
 
@@ -396,10 +509,17 @@ app.post("/login", async (req, res) => {
       });
     }
 
+    console.log("LOGIN REQUEST:", {
+      rollNumber,
+      forceRefresh: Boolean(forceRefresh),
+    });
+
     if (!forceRefresh) {
       const cached = getCachedData(rollNumber);
 
       if (cached) {
+        console.log("LOGIN CACHE HIT:", rollNumber);
+
         return res.json({
           ...cached,
           cached: true,
@@ -445,7 +565,9 @@ app.post("/login", async (req, res) => {
 
     const $ = cheerio.load(dashboardResponse.data);
 
-    const detailResponse = await client.get(`${BASE_URL}/DashBoardStudent/Detail`);
+    const detailResponse = await client.get(
+      `${BASE_URL}/DashBoardStudent/Detail`
+    );
     const detailPage = cheerio.load(detailResponse.data);
 
     const studentNameFromDetail = getValueByLabel(detailPage, "Name");
@@ -488,7 +610,9 @@ app.post("/login", async (req, res) => {
 
     const [attendance, photoBase64, resultData] = await Promise.all([
       Promise.all(
-        attendanceLinks.map((subject) => scrapeSubjectAttendance(client, subject))
+        attendanceLinks.map((subject) =>
+          scrapeSubjectAttendance(client, subject)
+        )
       ),
 
       imageToBase64(client, finalPhotoUrl),
@@ -503,6 +627,7 @@ app.post("/login", async (req, res) => {
           creditsEarned: "0",
           resultStatus: "Not Available",
           subjects: [],
+          results: [],
         };
       }),
     ]);
@@ -523,7 +648,8 @@ app.post("/login", async (req, res) => {
         photo: photoBase64 || finalPhotoUrl,
       },
       attendance,
-      result: resultData,
+      result: resultData.current || resultData,
+      results: resultData.results || [],
       cached: false,
       responseTimeMs: Date.now() - startedAt,
     };
