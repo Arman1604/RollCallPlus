@@ -11,6 +11,32 @@ app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 
 const BASE_URL = "https://agclms.in";
+const CACHE_TTL = 3 * 60 * 1000;
+const loginCache = new Map();
+
+function getCacheKey(rollNumber) {
+  return `student:${rollNumber}`;
+}
+
+function getCachedData(rollNumber) {
+  const cached = loginCache.get(getCacheKey(rollNumber));
+  if (!cached) return null;
+
+  const expired = Date.now() - cached.time > CACHE_TTL;
+  if (expired) {
+    loginCache.delete(getCacheKey(rollNumber));
+    return null;
+  }
+
+  return cached.data;
+}
+
+function setCachedData(rollNumber, data) {
+  loginCache.set(getCacheKey(rollNumber), {
+    time: Date.now(),
+    data,
+  });
+}
 
 function makeFullUrl(src) {
   if (!src) return "";
@@ -74,16 +100,16 @@ function extractProfileData($) {
   let labGroup = "Not Available";
 
   const semMatch = className.match(/Sem[-\s]*([IVX0-9]+)/i);
-  if (semMatch && semMatch[1]) semester = `Sem-${semMatch[1].toUpperCase()}`;
+  if (semMatch?.[1]) semester = `Sem-${semMatch[1].toUpperCase()}`;
 
   const sectionMatch =
     className.match(/Sec\s*([A-Z]-[A-Z])/i) ||
     className.match(/Section\s*([A-Z]-[A-Z])/i);
 
-  if (sectionMatch && sectionMatch[1]) section = sectionMatch[1].trim();
+  if (sectionMatch?.[1]) section = sectionMatch[1].trim();
 
   const labGroupMatch = className.match(/Lab Group\s*:?\s*([A-Za-z0-9-]+)/i);
-  if (labGroupMatch && labGroupMatch[1]) labGroup = labGroupMatch[1].trim();
+  if (labGroupMatch?.[1]) labGroup = labGroupMatch[1].trim();
 
   return {
     course: className,
@@ -124,6 +150,7 @@ async function imageToBase64(client, imageUrl) {
   try {
     const response = await client.get(imageUrl, {
       responseType: "arraybuffer",
+      timeout: 8000,
     });
 
     const contentType = response.headers["content-type"] || "image/jpeg";
@@ -132,7 +159,7 @@ async function imageToBase64(client, imageUrl) {
     return `data:${contentType};base64,${base64}`;
   } catch (error) {
     console.log("Image fetch failed:", error.message);
-    return "";
+    return imageUrl;
   }
 }
 
@@ -176,23 +203,6 @@ function extractResultFromPage($) {
   let resultStatus = "PASS";
   const subjects = [];
 
-  const gradePoints = {
-    O: 10,
-    "A+": 9,
-    A: 8,
-    "B+": 7,
-    B: 6,
-    "C+": 5,
-    C: 4,
-    D: 3,
-    E: 2,
-    F: 0,
-    "F(int)": 0,
-    "F(ext)": 0,
-    "ab(ext)": 0,
-    "ab(int)": 0,
-  };
-
   $("table tr").each((index, row) => {
     const cells = $(row)
       .find("td, th")
@@ -217,10 +227,12 @@ function extractResultFromPage($) {
     }
 
     if (joined.includes("sgpa")) {
-      const match = joined.match(/sgpa\s*([0-9]+(?:\.[0-9]+)?)/i);
-      if (match) sgpa = match[1];
+      const sgpaMatch = joined.match(/sgpa\s*([0-9]+(?:\.[0-9]+)?)/i);
+      if (sgpaMatch) sgpa = sgpaMatch[1];
 
-      const creditMatch = joined.match(/credit[s]?\s*earned\s*([0-9]+(?:\.[0-9]+)?)/i);
+      const creditMatch = joined.match(
+        /credit[s]?\s*earned\s*([0-9]+(?:\.[0-9]+)?)/i
+      );
       if (creditMatch) creditsEarned = creditMatch[1];
 
       if (joined.includes("pass")) resultStatus = "PASS";
@@ -236,7 +248,6 @@ function extractResultFromPage($) {
       const grade = cells[4];
 
       if (!/^\d+$/.test(serial)) return;
-      if (!name || !code || !credits || !grade) return;
 
       subjects.push({
         name,
@@ -249,7 +260,7 @@ function extractResultFromPage($) {
 
   if (creditsEarned === "0" && subjects.length > 0) {
     const earned = subjects.reduce((sum, subject) => {
-      const grade = subject.grade.toLowerCase();
+      const grade = String(subject.grade || "").toLowerCase();
       const credit = Number(subject.credits || 0);
 
       if (grade.includes("f") || grade.includes("ab")) return sum;
@@ -269,7 +280,6 @@ function extractResultFromPage($) {
 
 async function scrapeResult(client, dashboardPage) {
   const resultUrl = await findFinalResultUrl(client, dashboardPage);
-
   console.log("FINAL RESULT URL:", resultUrl);
 
   const resultResponse = await client.get(resultUrl);
@@ -278,19 +288,19 @@ async function scrapeResult(client, dashboardPage) {
   const resultData = extractResultFromPage($);
 
   if (resultData.sgpa === "0" && resultData.subjects.length > 0) {
-  return {
-    available: true,
-    message: "Result published but SGPA not declared due to reappear/detention",
-    sgpa: "Not Declared",
-    creditsEarned: resultData.creditsEarned,
-    resultStatus: "REAPPEAR / PENDING",
-    subjects: resultData.subjects,
-  };
-}
+    return {
+      available: true,
+      message: "Result published but SGPA not declared due to reappear/detention",
+      sgpa: "Not Declared",
+      creditsEarned: resultData.creditsEarned,
+      resultStatus: "REAPPEAR / PENDING",
+      subjects: resultData.subjects,
+    };
+  }
 
-if (resultData.sgpa === "0" && resultData.subjects.length === 0) {
-  throw new Error("Result not available");
-}
+  if (resultData.sgpa === "0" && resultData.subjects.length === 0) {
+    throw new Error("Result not available");
+  }
 
   return {
     available: true,
@@ -302,6 +312,71 @@ if (resultData.sgpa === "0" && resultData.subjects.length === 0) {
   };
 }
 
+async function scrapeSubjectAttendance(client, subject) {
+  try {
+    const reportResponse = await client.get(subject.url, {
+      timeout: 12000,
+    });
+
+    const reportPage = cheerio.load(reportResponse.data);
+
+    let present = 0;
+    let absent = 0;
+    let leave = 0;
+    let dutyLeave = 0;
+    const history = [];
+
+    reportPage("tr").each((index, row) => {
+      const cells = reportPage(row).find("td");
+
+      if (cells.length >= 2) {
+        const date = reportPage(cells[0]).text().trim();
+        const status = reportPage(cells[1]).text().trim().toUpperCase();
+
+        if (!date || !status) return;
+
+        if (status === "PRESENT") present++;
+        else if (status === "ABSENT") absent++;
+        else if (status === "LEAVE") leave++;
+        else if (status === "DUTY LEAVE") dutyLeave++;
+
+        history.push({ date, status });
+      }
+    });
+
+    const attended = present + dutyLeave;
+    const missed = absent + leave;
+    const total = present + absent + leave + dutyLeave;
+
+    return {
+      name: subject.name,
+      present,
+      absent,
+      leave,
+      dutyLeave,
+      attended,
+      missed,
+      total,
+      history,
+    };
+  } catch (error) {
+    console.log(`Attendance failed for ${subject.name}:`, error.message);
+
+    return {
+      name: subject.name,
+      present: 0,
+      absent: 0,
+      leave: 0,
+      dutyLeave: 0,
+      attended: 0,
+      missed: 0,
+      total: 0,
+      history: [],
+      error: "Could not fetch this subject",
+    };
+  }
+}
+
 app.get("/", (req, res) => {
   res.json({
     status: "success",
@@ -310,13 +385,27 @@ app.get("/", (req, res) => {
 });
 
 app.post("/login", async (req, res) => {
+  const startedAt = Date.now();
+
   try {
-    const { rollNumber, password } = req.body;
+    const { rollNumber, password, forceRefresh } = req.body;
 
     if (!rollNumber || !password) {
       return res.status(400).json({
         message: "Roll number and password required",
       });
+    }
+
+    if (!forceRefresh) {
+      const cached = getCachedData(rollNumber);
+
+      if (cached) {
+        return res.json({
+          ...cached,
+          cached: true,
+          responseTimeMs: Date.now() - startedAt,
+        });
+      }
     }
 
     const jar = new CookieJar();
@@ -325,8 +414,10 @@ app.post("/login", async (req, res) => {
       axios.create({
         jar,
         withCredentials: true,
+        timeout: 15000,
         headers: {
-          "User-Agent": "Mozilla/5.0",
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
         },
       })
     );
@@ -371,11 +462,10 @@ app.post("/login", async (req, res) => {
             .filter(Boolean)
             .pop() || "Student";
 
+    const profileData = extractProfileData(detailPage);
+
     const rawProfileImage = findProfileImage(detailPage);
     const finalPhotoUrl = makeFullUrl(rawProfileImage);
-    const photoBase64 = await imageToBase64(client, finalPhotoUrl);
-
-    const profileData = extractProfileData(detailPage);
 
     const attendanceLinks = [];
 
@@ -396,73 +486,28 @@ app.post("/login", async (req, res) => {
       }
     });
 
-    const attendance = [];
+    const [attendance, photoBase64, resultData] = await Promise.all([
+      Promise.all(
+        attendanceLinks.map((subject) => scrapeSubjectAttendance(client, subject))
+      ),
 
-    for (const subject of attendanceLinks) {
-      const reportResponse = await client.get(subject.url);
-      const reportPage = cheerio.load(reportResponse.data);
+      imageToBase64(client, finalPhotoUrl),
 
-      let present = 0;
-      let absent = 0;
-      let leave = 0;
-      let dutyLeave = 0;
+      scrapeResult(client, $).catch((error) => {
+        console.log("Result scraping failed:", error.message);
 
-      const history = [];
+        return {
+          available: false,
+          message: "Result not available in college portal",
+          sgpa: "0",
+          creditsEarned: "0",
+          resultStatus: "Not Available",
+          subjects: [],
+        };
+      }),
+    ]);
 
-      reportPage("tr").each((index, row) => {
-        const cells = reportPage(row).find("td");
-
-        if (cells.length >= 2) {
-          const date = reportPage(cells[0]).text().trim();
-          const status = reportPage(cells[1]).text().trim().toUpperCase();
-
-          if (!date || !status) return;
-
-          if (status === "PRESENT") present++;
-          else if (status === "ABSENT") absent++;
-          else if (status === "LEAVE") leave++;
-          else if (status === "DUTY LEAVE") dutyLeave++;
-
-          history.push({
-            date,
-            status,
-          });
-        }
-      });
-
-      const attended = present + dutyLeave;
-      const missed = absent + leave;
-      const total = present + absent + leave + dutyLeave;
-
-      attendance.push({
-        name: subject.name,
-        present,
-        absent,
-        leave,
-        dutyLeave,
-        attended,
-        missed,
-        total,
-        history,
-      });
-    }
-
-    let result = {
-      available: false,
-      message: "Result not available in college portal",
-      sgpa: "0",
-      creditsEarned: "0",
-      resultStatus: "Not Available",
-      subjects: [],
-    };
-
-    try {
-      result = await scrapeResult(client, $);
-    } catch (error) {
-      console.log("Result scraping failed:", error.message);
-    }
-
-    res.json({
+    const payload = {
       student: {
         name: studentName,
         rollNumber,
@@ -478,14 +523,21 @@ app.post("/login", async (req, res) => {
         photo: photoBase64 || finalPhotoUrl,
       },
       attendance,
-      result,
-    });
+      result: resultData,
+      cached: false,
+      responseTimeMs: Date.now() - startedAt,
+    };
+
+    setCachedData(rollNumber, payload);
+
+    res.json(payload);
   } catch (error) {
-    console.log(error.message);
+    console.log("Login scrape error:", error.message);
 
     res.status(500).json({
       message: "Portal scraping failed",
       error: error.message,
+      responseTimeMs: Date.now() - startedAt,
     });
   }
 });
