@@ -648,6 +648,9 @@ async function scrapeGnduResult(payload) {
     lawCoursesFound: 0,
     targetedCourseCode: inferredCourseCode || "Not available",
     semestersChecked: 0,
+    lastCourse: "",
+    lastSemester: "",
+    lastPagePreview: "",
   };
   const client = new GnduClient();
 
@@ -693,6 +696,7 @@ async function scrapeGnduResult(payload) {
         diagnostics.lawCoursesFound += lawCourses.length;
 
         for (const course of coursesToCheck) {
+          diagnostics.lastCourse = `${course.text} (${course.value})`;
           let semesterHtml = await postGnduStep(client, html, {
             __EVENTTARGET: "DrpDwnCMaster",
             DrpDwnYear: year,
@@ -707,6 +711,7 @@ async function scrapeGnduResult(payload) {
 
           for (const semester of semesters) {
             diagnostics.semestersChecked += 1;
+            diagnostics.lastSemester = `${semester.text} (${semester.value})`;
             const readyHtml = await postGnduStep(client, semesterHtml, {
               __EVENTTARGET: "DrpDwnCdetail",
               DrpDwnYear: year,
@@ -727,6 +732,13 @@ async function scrapeGnduResult(payload) {
             const result = extractGnduResultFromPage(resultHtml, {
               semester: semester.text,
             });
+            diagnostics.lastPagePreview = cleanValue(
+              cheerio
+                .load(resultHtml)("body")
+                .text()
+                .replace(/\s+/g, " ")
+                .slice(0, 700)
+            );
 
             if (result.available) {
               collected.push({
