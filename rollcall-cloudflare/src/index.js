@@ -246,6 +246,45 @@ function validateSupportPayload(body, requestId) {
   };
 }
 
+function validateSupportStatusPayload(body, requestId) {
+  const rollNumber = sanitizeText(body.rollNumber, 40);
+  const ticketIds = Array.isArray(body.ticketIds)
+    ? body.ticketIds.map((item) => sanitizeText(item, 80)).filter(Boolean)
+    : [];
+
+  if (!rollNumber || ticketIds.length === 0) {
+    return {
+      response: json(
+        { message: "Roll number and ticket IDs are required" },
+        400,
+        {},
+        requestId
+      ),
+    };
+  }
+
+  return { payload: { rollNumber, ticketIds: ticketIds.slice(0, 20) } };
+}
+
+function validateSupportReplyPayload(body, requestId) {
+  const ticketId = sanitizeText(body.ticketId, 80);
+  const reply = sanitizeText(body.reply, 1500);
+  const status = sanitizeText(body.status, 20) || "replied";
+
+  if (!ticketId || !reply) {
+    return {
+      response: json(
+        { message: "Ticket ID and reply are required" },
+        400,
+        {},
+        requestId
+      ),
+    };
+  }
+
+  return { payload: { ticketId, reply, status } };
+}
+
 function normalizeBaseUrl(value) {
   return String(value || "").replace(/\/+$/, "");
 }
@@ -1573,6 +1612,116 @@ async function handleSupportTicketsList(request, env, requestId) {
   return json({ status: "success", tickets }, 200, {}, requestId);
 }
 
+async function handleSupportTicketStatus(request, env, requestId) {
+  const bodyResult = await readJsonBody(request, requestId, MAX_SUPPORT_BODY_BYTES);
+  if (bodyResult.response) {
+    return bodyResult.response;
+  }
+
+  const validation = validateSupportStatusPayload(bodyResult.body, requestId);
+  if (validation.response) {
+    return validation.response;
+  }
+
+  if (!env.SUPPORT_TICKETS) {
+    return json(
+      { message: "Support storage is not configured." },
+      503,
+      {},
+      requestId
+    );
+  }
+
+  const tickets = (
+    await Promise.all(
+      validation.payload.ticketIds.map((ticketId) =>
+        env.SUPPORT_TICKETS.get(`ticket:${ticketId}`, "json")
+      )
+    )
+  )
+    .filter(Boolean)
+    .filter((ticket) => ticket.rollNumber === validation.payload.rollNumber)
+    .map((ticket) => ({
+      id: ticket.id,
+      status: ticket.status,
+      category: ticket.category,
+      priority: ticket.priority,
+      message: ticket.message,
+      createdAt: ticket.createdAt,
+      updatedAt: ticket.updatedAt,
+      reply: ticket.reply || null,
+    }));
+
+  return json({ status: "success", tickets }, 200, {}, requestId);
+}
+
+async function handleSupportTicketReply(request, env, requestId) {
+  const expectedToken = env.SUPPORT_ADMIN_TOKEN;
+  const providedToken = (request.headers.get("Authorization") || "").replace(
+    /^Bearer\s+/i,
+    ""
+  );
+
+  if (!expectedToken || providedToken !== expectedToken) {
+    return json({ message: "Unauthorized" }, 401, {}, requestId);
+  }
+
+  const bodyResult = await readJsonBody(request, requestId, MAX_SUPPORT_BODY_BYTES);
+  if (bodyResult.response) {
+    return bodyResult.response;
+  }
+
+  const validation = validateSupportReplyPayload(bodyResult.body, requestId);
+  if (validation.response) {
+    return validation.response;
+  }
+
+  if (!env.SUPPORT_TICKETS) {
+    return json(
+      { message: "Support storage is not configured." },
+      503,
+      {},
+      requestId
+    );
+  }
+
+  const ticket = await env.SUPPORT_TICKETS.get(
+    `ticket:${validation.payload.ticketId}`,
+    "json"
+  );
+
+  if (!ticket) {
+    return json({ message: "Ticket not found" }, 404, {}, requestId);
+  }
+
+  const now = new Date().toISOString();
+  const updatedTicket = {
+    ...ticket,
+    status: validation.payload.status,
+    updatedAt: now,
+    reply: {
+      message: validation.payload.reply,
+      repliedAt: now,
+    },
+  };
+
+  await env.SUPPORT_TICKETS.put(
+    `ticket:${validation.payload.ticketId}`,
+    JSON.stringify(updatedTicket)
+  );
+
+  return json(
+    {
+      status: "success",
+      ticketId: validation.payload.ticketId,
+      message: "Support ticket replied",
+    },
+    200,
+    {},
+    requestId
+  );
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -1637,6 +1786,22 @@ export default {
         }
 
         return handleSupportTicketsList(request, env, requestId);
+      }
+
+      if (url.pathname === "/support-ticket-status") {
+        if (request.method !== "POST") {
+          return json({ message: "Method not allowed" }, 405, {}, requestId);
+        }
+
+        return handleSupportTicketStatus(request, env, requestId);
+      }
+
+      if (url.pathname === "/support-ticket-reply") {
+        if (request.method !== "POST") {
+          return json({ message: "Method not allowed" }, 405, {}, requestId);
+        }
+
+        return handleSupportTicketReply(request, env, requestId);
       }
 
       return json({ message: "Not found" }, 404, {}, requestId);

@@ -13,7 +13,6 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  Share,
   Text,
   TextInput,
   TouchableOpacity,
@@ -23,7 +22,12 @@ import {
 import BottomTabs from "../components/BottomTabs";
 import { useAppStore } from "../store/useAppStore";
 import { useAppTheme } from "../theme/useAppTheme";
-import { API_BASE_URL, HEALTH_URL, SUPPORT_TICKET_URL } from "../utils/api";
+import {
+  API_BASE_URL,
+  HEALTH_URL,
+  SUPPORT_TICKET_STATUS_URL,
+  SUPPORT_TICKET_URL,
+} from "../utils/api";
 
 type Subject = {
   attended: number;
@@ -45,11 +49,16 @@ type SupportPriority = "Normal" | "Urgent";
 
 type SupportTicket = {
   id: string;
-  status: "open" | "shared";
+  status: "open" | "replied" | "closed" | "failed";
   category: SupportCategory;
   priority: SupportPriority;
   message: string;
   createdAt: string;
+  updatedAt?: string;
+  reply?: {
+    message: string;
+    repliedAt: string;
+  } | null;
 };
 
 const SUPPORT_CATEGORIES: SupportCategory[] = [
@@ -93,6 +102,20 @@ function isAvailable(value?: string) {
 function getSupportTicketsKey(rollNumber?: string) {
   const cleanRoll = String(rollNumber || "").trim();
   return cleanRoll ? `supportTickets:${cleanRoll}` : "supportTickets";
+}
+
+function getTicketStatusLabel(status: SupportTicket["status"]) {
+  if (status === "replied") return "Replied";
+  if (status === "closed") return "Closed";
+  if (status === "failed") return "Failed";
+  return "Open";
+}
+
+function getTicketStatusColor(status: SupportTicket["status"]) {
+  if (status === "replied") return "#38bdf8";
+  if (status === "closed") return "#64748b";
+  if (status === "failed") return "#ef4444";
+  return "#22c55e";
 }
 
 export default function Profile() {
@@ -148,6 +171,44 @@ export default function Profile() {
 
     setSupportTickets(updated);
     await AsyncStorage.setItem(supportTicketsKey, JSON.stringify(updated));
+  }
+
+  async function refreshSupportTickets() {
+    if (supportTickets.length === 0) return;
+
+    try {
+      const response = await fetch(SUPPORT_TICKET_STATUS_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          rollNumber: student?.rollNumber || "",
+          ticketIds: supportTickets.map((ticket) => ticket.id),
+        }),
+      });
+      const data = await response.json();
+
+      if (!response.ok || !Array.isArray(data.tickets)) {
+        throw new Error(data?.message || "Ticket refresh failed");
+      }
+
+      const remoteById = new Map(
+        data.tickets.map((ticket: SupportTicket) => [ticket.id, ticket])
+      );
+      const updated = supportTickets.map((ticket) => ({
+        ...ticket,
+        ...(remoteById.get(ticket.id) || {}),
+      }));
+
+      setSupportTickets(updated);
+      await AsyncStorage.setItem(supportTicketsKey, JSON.stringify(updated));
+    } catch (error) {
+      Alert.alert(
+        "Support Tickets",
+        String(error instanceof Error ? error.message : "Could not refresh tickets.")
+      );
+    }
   }
 
   async function switchAccount() {
@@ -294,6 +355,8 @@ export default function Profile() {
         priority: supportPriority,
         message: supportMessage.trim(),
         createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        reply: null,
       });
 
       setShowSupportCenter(false);
@@ -303,40 +366,13 @@ export default function Profile() {
         `Ticket ${data.ticketId} has been saved. We can use this ID to track your issue.`
       );
     } catch (error) {
-      const fallbackTicketId = `RC-${Date.now().toString().slice(-6)}`;
-
-      await Share.share({
-        title: "RollCall+ support ticket",
-        message: [
-          "RollCall+ Support Ticket",
-          "",
-          `Ticket: ${fallbackTicketId}`,
-          `Category: ${supportCategory}`,
-          `Priority: ${supportPriority}`,
-          `Contact: ${supportContact.trim() || "Not provided"}`,
-          `App: ${appLabel}`,
-          "Backend: Not submitted",
-          `Submit Error: ${String(error instanceof Error ? error.message : error)}`,
-          `API: ${API_BASE_URL}`,
-          `Roll No: ${student?.rollNumber || "Not available"}`,
-          "",
-          "Issue:",
-          supportMessage.trim(),
-        ].join("\n"),
-      });
-      await saveSupportTicket({
-        id: fallbackTicketId,
-        status: "shared",
-        category: supportCategory,
-        priority: supportPriority,
-        message: supportMessage.trim(),
-        createdAt: new Date().toISOString(),
-      });
-      setShowSupportCenter(false);
-      setSupportMessage("");
       Alert.alert(
-        "Support Ticket Shared",
-        "Cloud submit failed, so a shareable support ticket was prepared instead."
+        "Support Ticket Failed",
+        String(
+          error instanceof Error
+            ? error.message
+            : "Could not submit ticket. Please try again."
+        )
       );
     } finally {
       setSubmittingSupport(false);
@@ -483,7 +519,21 @@ export default function Profile() {
           <InfoCard label="Login" value="Saved securely on device" />
           <InfoCard label="App Version" value={appLabel} />
 
-          <Text style={[sectionTitle, { color: theme.text }]}>My Support Tickets</Text>
+          <View style={supportSectionHeader}>
+            <Text style={[sectionTitle, { color: theme.text, marginTop: 0, marginBottom: 0 }]}>
+              My Support Tickets
+            </Text>
+
+            {supportTickets.length > 0 && (
+              <TouchableOpacity
+                activeOpacity={0.86}
+                onPress={refreshSupportTickets}
+                style={[refreshTicketsButton, { backgroundColor: theme.input, borderColor: theme.border }]}
+              >
+                <Ionicons name="refresh" size={17} color={theme.primary} />
+              </TouchableOpacity>
+            )}
+          </View>
 
           {supportTickets.length === 0 ? (
             <View style={[emptySupportCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -511,20 +561,18 @@ export default function Profile() {
                     style={[
                       supportStatusPill,
                       {
-                        backgroundColor:
-                          ticket.status === "open" ? "#22c55e22" : "#f59e0b22",
-                        borderColor:
-                          ticket.status === "open" ? "#22c55e" : "#f59e0b",
+                        backgroundColor: `${getTicketStatusColor(ticket.status)}22`,
+                        borderColor: getTicketStatusColor(ticket.status),
                       },
                     ]}
                   >
                     <Text
                       style={[
                         supportStatusText,
-                        { color: ticket.status === "open" ? "#22c55e" : "#f59e0b" },
+                        { color: getTicketStatusColor(ticket.status) },
                       ]}
                     >
-                      {ticket.status === "open" ? "Open" : "Shared"}
+                      {getTicketStatusLabel(ticket.status)}
                     </Text>
                   </View>
                 </View>
@@ -532,6 +580,17 @@ export default function Profile() {
                 <Text numberOfLines={2} style={[supportTicketMessage, { color: theme.muted }]}>
                   {ticket.message}
                 </Text>
+
+                {ticket.reply?.message && (
+                  <View style={[supportReplyBox, { backgroundColor: theme.input, borderColor: theme.border }]}>
+                    <Text style={[supportReplyLabel, { color: theme.primary }]}>
+                      Support Reply
+                    </Text>
+                    <Text style={[supportReplyText, { color: theme.text }]}>
+                      {ticket.reply.message}
+                    </Text>
+                  </View>
+                )}
               </View>
             ))
           )}
@@ -1064,6 +1123,23 @@ const supportSubmitText = {
   fontWeight: "900" as const,
 };
 
+const supportSectionHeader = {
+  flexDirection: "row" as const,
+  alignItems: "center" as const,
+  justifyContent: "space-between" as const,
+  marginTop: 32,
+  marginBottom: 16,
+};
+
+const refreshTicketsButton = {
+  width: 42,
+  height: 42,
+  borderRadius: 16,
+  borderWidth: 1,
+  alignItems: "center" as const,
+  justifyContent: "center" as const,
+};
+
 const emptySupportCard = {
   padding: 18,
   borderRadius: 24,
@@ -1115,6 +1191,24 @@ const supportStatusText = {
 const supportTicketMessage = {
   marginTop: 10,
   lineHeight: 20,
+};
+
+const supportReplyBox = {
+  marginTop: 12,
+  padding: 12,
+  borderRadius: 18,
+  borderWidth: 1,
+};
+
+const supportReplyLabel = {
+  fontWeight: "900" as const,
+  fontSize: 13,
+};
+
+const supportReplyText = {
+  marginTop: 6,
+  lineHeight: 20,
+  fontWeight: "700" as const,
 };
 
 const accountItem = {
