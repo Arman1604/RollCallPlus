@@ -67,7 +67,6 @@ function getAIInsight(subject: Subject) {
       level: "Low Risk",
       confidence: "96%",
       mood: "Excellent",
-      emoji: "🟢",
       advice:
         safeMisses > 0
           ? `Strong attendance. You can safely miss around ${safeMisses} class${
@@ -82,7 +81,6 @@ function getAIInsight(subject: Subject) {
       level: "Safe",
       confidence: "90%",
       mood: "Stable",
-      emoji: "🟡",
       advice:
         safeMisses > 0
           ? `You are safe for now. You can miss ${safeMisses} class${
@@ -97,7 +95,6 @@ function getAIInsight(subject: Subject) {
       level: "Medium Risk",
       confidence: "88%",
       mood: "Warning",
-      emoji: "🟠",
       advice: `Attend the next ${neededClasses} class${
         neededClasses > 1 ? "es" : ""
       } continuously to recover back to 75%.`,
@@ -108,7 +105,6 @@ function getAIInsight(subject: Subject) {
     level: "High Risk",
     confidence: "94%",
     mood: "Critical",
-    emoji: "🔴",
     advice: `This subject needs urgent focus. Attend at least the next ${neededClasses} class${
       neededClasses > 1 ? "es" : ""
     } to reach the safe zone.`,
@@ -168,17 +164,14 @@ export default function Predictor() {
       <Stack.Screen options={{ headerShown: false }} />
 
       <ScrollView style={{ flex: 1, backgroundColor: theme.background }}>
-        <View style={{ padding: 20, paddingTop: 70, paddingBottom: 120 }}>
-          <View style={blueGlow} />
-          <View style={purpleGlow} />
+        <View style={{ padding: 20, paddingTop: 70, paddingBottom: 190 }}>
 
           <Text style={eyebrow}>ROLLCALL+ INTELLIGENCE</Text>
 
-          <Text style={[title, { color: theme.text }]}>AI Risk Engine</Text>
+          <Text style={[title, { color: theme.text }]}>Attendance Predictor</Text>
 
           <Text style={[subtitle, { color: theme.muted }]}>
-            Smart bunk safety, recovery planning, risk score, and subject-wise
-            attendance prediction.
+            Bunk safety, recovery planning, and subject-wise attendance risk.
           </Text>
 
           <View
@@ -195,7 +188,7 @@ export default function Predictor() {
               elevation: 8,
             }}
           >
-            <Text style={[cardLabel, { color: theme.muted }]}>AI Health Score</Text>
+            <Text style={[cardLabel, { color: theme.muted }]}>Health Score</Text>
 
             <Text
               style={{
@@ -236,14 +229,36 @@ export default function Predictor() {
             <MiniStat title="Risk" value={dangerSubjects.length.toString()} />
           </View>
 
-          <Text style={[sectionTitle, { color: theme.text }]}>Semester AI Summary</Text>
+          <View style={[actionCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <Text style={[cardLabel, { color: theme.muted }]}>Next Best Move</Text>
+
+            <Text style={[actionTitle, { color: theme.text }]}>
+              {validSubjects.length === 0
+                ? "Sync attendance first"
+                : highestRiskSubject && percentage(highestRiskSubject.attended, highestRiskSubject.total) < 75
+                ? `Attend ${highestRiskSubject.name}`
+                : "Keep your current rhythm"}
+            </Text>
+
+            <Text style={[actionText, { color: theme.mode === "dark" ? "#cbd5e1" : theme.muted }]}>
+              {validSubjects.length === 0
+                ? "Once your subjects load, RollCall+ will calculate your recovery plan."
+                : highestRiskSubject && percentage(highestRiskSubject.attended, highestRiskSubject.total) < 75
+                ? `${getClassesNeededFor75(highestRiskSubject)} continuous class${
+                    getClassesNeededFor75(highestRiskSubject) === 1 ? "" : "es"
+                  } can bring this subject back toward 75%.`
+                : "No subject is below 75%. Avoid unnecessary misses to protect your margin."}
+            </Text>
+          </View>
+
+          <Text style={[sectionTitle, { color: theme.text }]}>Semester Summary</Text>
 
           <View style={[summaryCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <SummaryRow
               title="Highest Risk"
               value={
                 highestRiskSubject
-                  ? `${highestRiskSubject.name} • ${percentage(
+                  ? `${highestRiskSubject.name} - ${percentage(
                       highestRiskSubject.attended,
                       highestRiskSubject.total
                     )}%`
@@ -255,7 +270,7 @@ export default function Predictor() {
               title="Best Subject"
               value={
                 bestSubject
-                  ? `${bestSubject.name} • ${percentage(
+                  ? `${bestSubject.name} - ${percentage(
                       bestSubject.attended,
                       bestSubject.total
                     )}%`
@@ -277,14 +292,14 @@ export default function Predictor() {
             />
           </View>
 
-          <Text style={[sectionTitle, { color: theme.text }]}>AI Risk Analysis</Text>
+          <Text style={[sectionTitle, { color: theme.text }]}>Risk Subjects</Text>
 
           {dangerSubjects.length === 0 ? (
             <EmptyCard
               text={
                 validSubjects.length === 0
                   ? "No active subjects found yet."
-                  : "No risky subjects. You are doing great 🔥"
+                  : "No risky subjects. You are in the safe zone."
               }
             />
           ) : (
@@ -364,7 +379,7 @@ function PredictionCard({
           <Text style={[subjectName, { color: theme.text }]}>{subject.name}</Text>
 
           <Text style={[mutedText, { color: theme.subtle }]}>
-            {subject.attended} attended • {subject.missed} missed •{" "}
+            {subject.attended} attended - {subject.missed} missed -{" "}
             {subject.total} total
           </Text>
         </View>
@@ -425,11 +440,11 @@ function PredictionCard({
         }}
       >
         <Text style={{ color, fontWeight: "900", fontSize: 15 }}>
-          {ai.emoji} AI Analysis • {ai.confidence} confidence
+          Risk Analysis - {ai.confidence} confidence
         </Text>
 
         <Text style={[analysisTitle, { color: theme.text }]}>
-          {ai.level} — {ai.mood}
+          {ai.level} - {ai.mood}
         </Text>
 
         <Text style={[analysisText, { color: theme.mode === "dark" ? "#cbd5e1" : theme.muted }]}>{ai.advice}</Text>
@@ -543,26 +558,6 @@ function EmptyCard({ text }: { text: string }) {
     </View>
   );
 }
-
-const blueGlow = {
-  position: "absolute" as const,
-  width: 260,
-  height: 260,
-  borderRadius: 130,
-  backgroundColor: "#2563eb22",
-  top: -80,
-  right: -100,
-};
-
-const purpleGlow = {
-  position: "absolute" as const,
-  width: 220,
-  height: 220,
-  borderRadius: 110,
-  backgroundColor: "#8b5cf622",
-  top: 210,
-  left: -120,
-};
 
 const eyebrow = {
   color: "#38bdf8",
@@ -692,6 +687,26 @@ const miniValue = {
   fontSize: 24,
   fontWeight: "900" as const,
   marginTop: 6,
+};
+
+const actionCard = {
+  padding: 18,
+  borderRadius: 24,
+  borderWidth: 1,
+  borderColor: "#1e293b",
+  marginTop: 16,
+};
+
+const actionTitle = {
+  fontSize: 20,
+  lineHeight: 26,
+  fontWeight: "900" as const,
+  marginTop: 8,
+};
+
+const actionText = {
+  marginTop: 8,
+  lineHeight: 21,
 };
 
 const smallBox = {
