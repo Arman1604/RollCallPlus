@@ -1832,6 +1832,13 @@ function supportAdminPage() {
       flex-wrap: wrap;
       margin: 16px 0 20px;
     }
+    .savedHint {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+      min-height: 18px;
+    }
     .status {
       padding: 10px 12px;
       border-radius: 999px;
@@ -1915,6 +1922,7 @@ function supportAdminPage() {
       <div>
         <label for="token">Admin token</label>
         <input id="token" placeholder="Paste SUPPORT_ADMIN_TOKEN" autocomplete="off" />
+        <div class="savedHint" id="savedHint"></div>
       </div>
       <button id="load">Load tickets</button>
     </section>
@@ -1933,7 +1941,14 @@ function supportAdminPage() {
     const tokenInput = document.getElementById("token");
     const ticketsEl = document.getElementById("tickets");
     const countEl = document.getElementById("count");
+    const savedHintEl = document.getElementById("savedHint");
     tokenInput.value = localStorage.getItem("rollcall_support_token") || "";
+
+    function updateSavedHint() {
+      savedHintEl.textContent = tokenInput.value.trim()
+        ? "Saved on this browser. Open this page later and tickets will load automatically."
+        : "Paste once on this browser to remember it.";
+    }
 
     function escapeHtml(value) {
       return String(value || "").replace(/[&<>"']/g, (char) => ({
@@ -1948,6 +1963,7 @@ function supportAdminPage() {
     function getToken() {
       const token = tokenInput.value.trim();
       if (token) localStorage.setItem("rollcall_support_token", token);
+      updateSavedHint();
       return token;
     }
 
@@ -2042,11 +2058,13 @@ function supportAdminPage() {
 
     document.getElementById("load").addEventListener("click", loadTickets);
     document.getElementById("refresh").addEventListener("click", loadTickets);
+    tokenInput.addEventListener("input", updateSavedHint);
     document.getElementById("clearToken").addEventListener("click", () => {
       localStorage.removeItem("rollcall_support_token");
       tokenInput.value = "";
       ticketsEl.innerHTML = '<div class="panel empty">Paste your admin token and load tickets.</div>';
       countEl.textContent = "Not loaded";
+      updateSavedHint();
     });
 
     ticketsEl.addEventListener("click", (event) => {
@@ -2061,6 +2079,11 @@ function supportAdminPage() {
         copyId(ticketId);
       }
     });
+
+    updateSavedHint();
+    if (tokenInput.value.trim()) {
+      loadTickets();
+    }
   </script>
 </body>
 </html>`;
