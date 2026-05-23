@@ -197,6 +197,7 @@ function validateGnduPayload(body, requestId) {
       year: String(body.year || ""),
       month: String(body.month || ""),
       courseType: String(body.courseType || ""),
+      courseCode: String(body.courseCode || ""),
     },
   };
 }
@@ -601,10 +602,13 @@ async function scrapeGnduResult(payload) {
     : [new Date().getFullYear().toString()];
   const months = payload.month ? [payload.month] : ["5"];
   const courseTypes = payload.courseType ? [payload.courseType] : ["P"];
+  const inferredCourseCode =
+    payload.courseCode || payload.rollNumber.match(/^\d{4}/)?.[0] || "";
   const collected = [];
   const diagnostics = {
     sessionsChecked: 0,
     lawCoursesFound: 0,
+    targetedCourseCode: inferredCourseCode || "Not available",
     semestersChecked: 0,
   };
   const client = new GnduClient();
@@ -638,9 +642,19 @@ async function scrapeGnduResult(payload) {
               item.text
             )
         );
+        const targetedCourses = inferredCourseCode
+          ? lawCourses.filter(
+              (item) =>
+                item.value === inferredCourseCode ||
+                item.text.includes(`(${inferredCourseCode})`)
+            )
+          : lawCourses;
+        const coursesToCheck =
+          targetedCourses.length > 0 ? targetedCourses : lawCourses.slice(0, 2);
+
         diagnostics.lawCoursesFound += lawCourses.length;
 
-        for (const course of lawCourses) {
+        for (const course of coursesToCheck) {
           let semesterHtml = await postGnduStep(client, html, {
             __EVENTTARGET: "DrpDwnCMaster",
             DrpDwnYear: year,

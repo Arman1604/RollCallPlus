@@ -249,6 +249,7 @@ export default function GPATracker() {
           year: gnduYearInput.trim(),
           month: gnduMonthInput.trim(),
           courseType: gnduCourseTypeInput.trim(),
+          courseCode: rollToFetch.slice(0, 4),
         }),
       });
       const data = await response.json();
