@@ -519,6 +519,7 @@ export default function Profile() {
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode="on-drag"
                 showsVerticalScrollIndicator={false}
+                contentContainerStyle={supportScrollContent}
               >
                 <Text style={[modalTitle, { color: theme.text }]}>Support Center</Text>
                 <Text style={[modalSubtitle, { color: theme.muted }]}>
@@ -860,12 +861,18 @@ const accountModal = {
 
 const supportModal = {
   backgroundColor: "#0f172a",
-  padding: 22,
+  paddingHorizontal: 22,
+  paddingTop: 22,
+  paddingBottom: 10,
   borderTopLeftRadius: 34,
   borderTopRightRadius: 34,
   borderWidth: 1,
   borderColor: "#1e293b",
-  maxHeight: "88%" as const,
+  maxHeight: "82%" as const,
+};
+
+const supportScrollContent = {
+  paddingBottom: 190,
 };
 
 const modalHandle = {
@@ -926,7 +933,7 @@ const supportInput = {
 };
 
 const supportMessageInput = {
-  minHeight: 120,
+  minHeight: 150,
   padding: 14,
   borderRadius: 18,
   borderWidth: 1,
