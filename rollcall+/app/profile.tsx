@@ -1,5 +1,6 @@
 import { Stack, router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import Constants from "expo-constants";
 import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
 
@@ -9,6 +10,7 @@ import {
   Modal,
   Pressable,
   ScrollView,
+  Share,
   Text,
   TouchableOpacity,
   View,
@@ -17,6 +19,7 @@ import {
 import BottomTabs from "../components/BottomTabs";
 import { useAppStore } from "../store/useAppStore";
 import { useAppTheme } from "../theme/useAppTheme";
+import { API_BASE_URL, HEALTH_URL } from "../utils/api";
 
 type Subject = {
   attended: number;
@@ -71,6 +74,7 @@ export default function Profile() {
   const theme = useAppTheme();
   const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>([]);
   const [showAccountPicker, setShowAccountPicker] = useState(false);
+  const [reportingIssue, setReportingIssue] = useState(false);
 
   const totalAttended = subjects.reduce((sum, s) => sum + (s.attended || 0), 0);
   const totalMissed = subjects.reduce((sum, s) => sum + (s.missed || 0), 0);
@@ -78,6 +82,12 @@ export default function Profile() {
   const overall = percentage(totalAttended, totalLectures);
 
   const photoUrl = student?.photo || student?.profilePic || student?.image;
+  const appVersion = Constants.expoConfig?.version || "1.0.0";
+  const appBuild =
+    Constants.expoConfig?.android?.versionCode ||
+    Constants.expoConfig?.ios?.buildNumber ||
+    "1";
+  const appLabel = `v${appVersion} (${appBuild})`;
 
   async function switchAccount() {
     try {
@@ -166,6 +176,44 @@ export default function Profile() {
     const nextTheme = themeMode === "dark" ? "light" : "dark";
     setThemeMode(nextTheme);
     await AsyncStorage.setItem("rollcall_theme", nextTheme);
+  }
+
+  async function reportIssue() {
+    try {
+      setReportingIssue(true);
+
+      let requestId = "Not available";
+      let backendStatus = "Not checked";
+
+      try {
+        const response = await fetch(HEALTH_URL);
+        const data = await response.json();
+        requestId =
+          data?.requestId || response.headers.get("X-Request-Id") || requestId;
+        backendStatus = data?.status || `HTTP ${response.status}`;
+      } catch {
+        backendStatus = "Health check failed";
+      }
+
+      await Share.share({
+        title: "RollCall+ issue report",
+        message: [
+          "RollCall+ Issue Report",
+          "",
+          `App: ${appLabel}`,
+          `Backend: ${backendStatus}`,
+          `Request ID: ${requestId}`,
+          `API: ${API_BASE_URL}`,
+          `Roll No: ${student?.rollNumber || "Not available"}`,
+          "",
+          "What happened:",
+        ].join("\n"),
+      });
+    } catch {
+      Alert.alert("Report Issue", "Could not open the report sheet right now.");
+    } finally {
+      setReportingIssue(false);
+    }
   }
 
   return (
@@ -306,8 +354,20 @@ export default function Profile() {
             <InfoCard label="Portal Sync" value="Enabled" />
           </TouchableOpacity>
           <InfoCard label="Login" value="Saved securely on device" />
+          <InfoCard label="App Version" value={appLabel} />
 
           <View style={actionPanel}>
+            <ActionButton
+              icon="chatbox-ellipses-outline"
+              title={reportingIssue ? "Preparing Report" : "Report Issue"}
+              subtitle="Share app version and safe debug info"
+              color="#38bdf8"
+              backgroundColor="#0ea5e922"
+              borderColor="#0ea5e966"
+              onPress={reportIssue}
+              disabled={reportingIssue}
+            />
+
             <ActionButton
               icon="swap-horizontal"
               title="Switch Account"
@@ -415,6 +475,7 @@ function ActionButton({
   backgroundColor,
   borderColor,
   onPress,
+  disabled = false,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
@@ -423,6 +484,7 @@ function ActionButton({
   backgroundColor: string;
   borderColor: string;
   onPress: () => void;
+  disabled?: boolean;
 }) {
   const theme = useAppTheme();
 
@@ -430,7 +492,15 @@ function ActionButton({
     <TouchableOpacity
       activeOpacity={0.86}
       onPress={onPress}
-      style={[actionButton, { backgroundColor: theme.surface, borderColor }]}
+      disabled={disabled}
+      style={[
+        actionButton,
+        {
+          backgroundColor: theme.surface,
+          borderColor,
+          opacity: disabled ? 0.72 : 1,
+        },
+      ]}
     >
       <View style={[actionIconBox, { backgroundColor }]}>
         <Ionicons name={icon} size={24} color={color} />

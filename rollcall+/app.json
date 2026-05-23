@@ -14,7 +14,8 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.arman160406.rollcallplus"
+      "bundleIdentifier": "com.arman160406.rollcallplus",
+      "buildNumber": "1"
     },
     "android": {
       "adaptiveIcon": {
@@ -22,7 +23,8 @@
         "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.arman160406.rollcallplus"
+      "package": "com.arman160406.rollcallplus",
+      "versionCode": 1
     },
     "web": {
       "bundler": "metro",
