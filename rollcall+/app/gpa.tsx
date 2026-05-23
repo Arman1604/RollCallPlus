@@ -134,6 +134,9 @@ export default function GPATracker() {
   const [semester, setSemester] = useState("");
   const [sgpaInput, setSgpaInput] = useState("");
   const [gnduRollInput, setGnduRollInput] = useState(gnduRollNumber);
+  const [gnduYearInput, setGnduYearInput] = useState("2025");
+  const [gnduMonthInput, setGnduMonthInput] = useState("5");
+  const [gnduCourseTypeInput, setGnduCourseTypeInput] = useState("C-");
   const [manualData, setManualData] = useState<ManualSGPA[]>([]);
   const [gnduResults, setGnduResults] = useState<ResultData[]>([]);
   const [gnduLoading, setGnduLoading] = useState(false);
@@ -243,6 +246,9 @@ export default function GPATracker() {
         },
         body: JSON.stringify({
           rollNumber: rollToFetch,
+          year: gnduYearInput.trim(),
+          month: gnduMonthInput.trim(),
+          courseType: gnduCourseTypeInput.trim(),
         }),
       });
       const data = await response.json();
@@ -251,6 +257,8 @@ export default function GPATracker() {
         Alert.alert(
           "GNDU Result Not Found",
           `${data.message || "Result is not available yet."}${
+            data.error ? `\n\nError: ${data.error}` : ""
+          }${
             data.diagnostics
               ? `\n\nChecked: ${data.diagnostics.sessionsChecked} sessions, ${data.diagnostics.lawCoursesFound} law courses, ${data.diagnostics.semestersChecked} semesters.`
               : ""
@@ -592,6 +600,39 @@ export default function GPATracker() {
                   keyboardType="number-pad"
                   style={[input, { backgroundColor: theme.input, color: theme.text, borderColor: theme.borderStrong }]}
                 />
+
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  <TextInput
+                    placeholder="Year"
+                    placeholderTextColor={theme.subtle}
+                    value={gnduYearInput}
+                    onChangeText={setGnduYearInput}
+                    keyboardType="number-pad"
+                    style={[input, { flex: 1, backgroundColor: theme.input, color: theme.text, borderColor: theme.borderStrong }]}
+                  />
+
+                  <TextInput
+                    placeholder="Month"
+                    placeholderTextColor={theme.subtle}
+                    value={gnduMonthInput}
+                    onChangeText={setGnduMonthInput}
+                    keyboardType="number-pad"
+                    style={[input, { flex: 1, backgroundColor: theme.input, color: theme.text, borderColor: theme.borderStrong }]}
+                  />
+
+                  <TextInput
+                    placeholder="Type"
+                    placeholderTextColor={theme.subtle}
+                    value={gnduCourseTypeInput}
+                    onChangeText={setGnduCourseTypeInput}
+                    autoCapitalize="characters"
+                    style={[input, { flex: 1, backgroundColor: theme.input, color: theme.text, borderColor: theme.borderStrong }]}
+                  />
+                </View>
+
+                <Text style={[mutedText, { color: theme.subtle, marginBottom: 12 }]}>
+                  Month: 5 May, 12 December. Type: C- college course, T pass course.
+                </Text>
 
                 <TouchableOpacity
                   onPress={fetchGnduResult}

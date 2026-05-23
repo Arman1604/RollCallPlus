@@ -531,9 +531,9 @@ function extractGnduResultFromPage(html, meta = {}) {
 async function scrapeGnduResult(payload) {
   const years = payload.year
     ? [payload.year]
-    : ["2026", "2025", "2024", "2023", "2022"];
-  const months = payload.month ? [payload.month] : ["12", "5", "4", "9"];
-  const courseTypes = payload.courseType ? [payload.courseType] : ["C-", "T", "A", "C"];
+    : [new Date().getFullYear().toString()];
+  const months = payload.month ? [payload.month] : ["5"];
+  const courseTypes = payload.courseType ? [payload.courseType] : ["C-"];
   const collected = [];
   const diagnostics = {
     sessionsChecked: 0,
