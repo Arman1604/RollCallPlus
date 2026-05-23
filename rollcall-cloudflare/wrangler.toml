@@ -6,3 +6,7 @@ compatibility_date = "2025-05-23"
 RAILWAY_BACKEND_URL = "https://rollcallplus-production.up.railway.app"
 USE_NATIVE_SCRAPER = "true"
 NATIVE_FALLBACK_TO_RAILWAY = "false"
+
+[[kv_namespaces]]
+binding = "SUPPORT_TICKETS"
+id = "5310be13379349a3bd0883eaa51a2a44"

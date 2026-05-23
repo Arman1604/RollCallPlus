@@ -5,10 +5,13 @@ const GNDU_RESULT_URL =
   "https://collegeadmissions.gndu.ac.in/studentarea/gnduexamresult.aspx";
 const CACHE_TTL = 3 * 60 * 1000;
 const MAX_LOGIN_BODY_BYTES = 4096;
+const MAX_SUPPORT_BODY_BYTES = 8192;
 const LOGIN_IP_LIMIT = 30;
 const LOGIN_IP_WINDOW_MS = 10 * 60 * 1000;
 const LOGIN_ACCOUNT_LIMIT = 8;
 const LOGIN_ACCOUNT_WINDOW_MS = 5 * 60 * 1000;
+const SUPPORT_IP_LIMIT = 12;
+const SUPPORT_IP_WINDOW_MS = 10 * 60 * 1000;
 const loginCache = new Map();
 const rateBuckets = new Map();
 
@@ -199,6 +202,46 @@ function validateGnduPayload(body, requestId) {
       courseType: String(body.courseType || ""),
       courseCode: String(body.courseCode || ""),
       semesterCode: String(body.semesterCode || ""),
+    },
+  };
+}
+
+function sanitizeText(value, maxLength = 500) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLength);
+}
+
+function validateSupportPayload(body, requestId) {
+  const category = sanitizeText(body.category, 40);
+  const priority = sanitizeText(body.priority, 20);
+  const contact = sanitizeText(body.contact, 120);
+  const message = sanitizeText(body.message, 1500);
+  const rollNumber = sanitizeText(body.rollNumber, 40);
+
+  if (!message || message.length < 8) {
+    return {
+      response: json(
+        { message: "Support message must be at least 8 characters" },
+        400,
+        {},
+        requestId
+      ),
+    };
+  }
+
+  return {
+    payload: {
+      category: category || "App Bug",
+      priority: priority || "Normal",
+      contact,
+      message,
+      rollNumber,
+      appVersion: sanitizeText(body.appVersion, 80),
+      backendStatus: sanitizeText(body.backendStatus, 120),
+      clientRequestId: sanitizeText(body.requestId, 80),
+      platform: sanitizeText(body.platform, 80),
     },
   };
 }
@@ -1422,6 +1465,114 @@ async function handleGnduResult(request, requestId) {
   }
 }
 
+async function handleSupportTicket(request, env, requestId) {
+  const retryAfter = checkRateLimit(
+    `support:ip:${getClientIp(request)}`,
+    SUPPORT_IP_LIMIT,
+    SUPPORT_IP_WINDOW_MS
+  );
+
+  if (retryAfter) {
+    return json(
+      { message: "Too many support tickets. Please try again shortly." },
+      429,
+      { "Retry-After": String(retryAfter) },
+      requestId
+    );
+  }
+
+  const bodyResult = await readJsonBody(request, requestId, MAX_SUPPORT_BODY_BYTES);
+  if (bodyResult.response) {
+    return bodyResult.response;
+  }
+
+  const validation = validateSupportPayload(bodyResult.body, requestId);
+  if (validation.response) {
+    return validation.response;
+  }
+
+  if (!env.SUPPORT_TICKETS) {
+    return json(
+      { message: "Support storage is not configured." },
+      503,
+      {},
+      requestId
+    );
+  }
+
+  const ticketId = `RC-${Date.now().toString(36).toUpperCase()}-${requestId
+    .split("-")
+    .pop()
+    .toUpperCase()}`;
+  const now = new Date().toISOString();
+  const ticket = {
+    id: ticketId,
+    status: "open",
+    createdAt: now,
+    updatedAt: now,
+    ...validation.payload,
+    requestId,
+  };
+
+  await env.SUPPORT_TICKETS.put(`ticket:${ticketId}`, JSON.stringify(ticket));
+  await env.SUPPORT_TICKETS.put(`ticket-index:${now}:${ticketId}`, ticketId);
+
+  logEvent("log", "support.ticket_created", {
+    requestId,
+    ticketId,
+    category: ticket.category,
+    priority: ticket.priority,
+  });
+
+  return json(
+    {
+      status: "success",
+      ticketId,
+      message: "Support ticket created",
+    },
+    201,
+    {},
+    requestId
+  );
+}
+
+async function handleSupportTicketsList(request, env, requestId) {
+  const expectedToken = env.SUPPORT_ADMIN_TOKEN;
+  const providedToken = (request.headers.get("Authorization") || "").replace(
+    /^Bearer\s+/i,
+    ""
+  );
+
+  if (!expectedToken || providedToken !== expectedToken) {
+    return json({ message: "Unauthorized" }, 401, {}, requestId);
+  }
+
+  if (!env.SUPPORT_TICKETS) {
+    return json(
+      { message: "Support storage is not configured." },
+      503,
+      {},
+      requestId
+    );
+  }
+
+  const listed = await env.SUPPORT_TICKETS.list({
+    prefix: "ticket-index:",
+    limit: 50,
+  });
+  const ticketIds = listed.keys
+    .map((item) => item.name.split(":").pop())
+    .filter(Boolean)
+    .reverse();
+  const tickets = (
+    await Promise.all(
+      ticketIds.map((ticketId) => env.SUPPORT_TICKETS.get(`ticket:${ticketId}`, "json"))
+    )
+  ).filter(Boolean);
+
+  return json({ status: "success", tickets }, 200, {}, requestId);
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -1470,6 +1621,22 @@ export default {
         }
 
         return handleGnduResult(request, requestId);
+      }
+
+      if (url.pathname === "/support-ticket") {
+        if (request.method !== "POST") {
+          return json({ message: "Method not allowed" }, 405, {}, requestId);
+        }
+
+        return handleSupportTicket(request, env, requestId);
+      }
+
+      if (url.pathname === "/support-tickets") {
+        if (request.method !== "GET") {
+          return json({ message: "Method not allowed" }, 405, {}, requestId);
+        }
+
+        return handleSupportTicketsList(request, env, requestId);
       }
 
       return json({ message: "Not found" }, 404, {}, requestId);

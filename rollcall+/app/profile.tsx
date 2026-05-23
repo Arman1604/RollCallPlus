@@ -20,7 +20,7 @@ import {
 import BottomTabs from "../components/BottomTabs";
 import { useAppStore } from "../store/useAppStore";
 import { useAppTheme } from "../theme/useAppTheme";
-import { API_BASE_URL, HEALTH_URL } from "../utils/api";
+import { API_BASE_URL, HEALTH_URL, SUPPORT_TICKET_URL } from "../utils/api";
 
 type Subject = {
   attended: number;
@@ -219,20 +219,53 @@ export default function Profile() {
         backendStatus = "Health check failed";
       }
 
-      const ticketId = `RC-${Date.now().toString().slice(-6)}`;
+      const ticketPayload = {
+        category: supportCategory,
+        priority: supportPriority,
+        contact: supportContact.trim(),
+        message: supportMessage.trim(),
+        appVersion: appLabel,
+        backendStatus,
+        requestId,
+        apiBaseUrl: API_BASE_URL,
+        rollNumber: student?.rollNumber || "",
+        platform: "expo",
+      };
+
+      const response = await fetch(SUPPORT_TICKET_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(ticketPayload),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.message || "Support ticket submit failed");
+      }
+
+      setShowSupportCenter(false);
+      setSupportMessage("");
+      Alert.alert(
+        "Support Ticket Created",
+        `Ticket ${data.ticketId} has been saved. We can use this ID to track your issue.`
+      );
+    } catch (error) {
+      const fallbackTicketId = `RC-${Date.now().toString().slice(-6)}`;
 
       await Share.share({
         title: "RollCall+ support ticket",
         message: [
           "RollCall+ Support Ticket",
           "",
-          `Ticket: ${ticketId}`,
+          `Ticket: ${fallbackTicketId}`,
           `Category: ${supportCategory}`,
           `Priority: ${supportPriority}`,
           `Contact: ${supportContact.trim() || "Not provided"}`,
           `App: ${appLabel}`,
-          `Backend: ${backendStatus}`,
-          `Request ID: ${requestId}`,
+          "Backend: Not submitted",
+          `Submit Error: ${String(error instanceof Error ? error.message : error)}`,
           `API: ${API_BASE_URL}`,
           `Roll No: ${student?.rollNumber || "Not available"}`,
           "",
@@ -242,9 +275,10 @@ export default function Profile() {
       });
       setShowSupportCenter(false);
       setSupportMessage("");
-      Alert.alert("Support Ticket Ready", `Ticket ${ticketId} has been prepared.`);
-    } catch {
-      Alert.alert("Support", "Could not prepare the support ticket right now.");
+      Alert.alert(
+        "Support Ticket Shared",
+        "Cloud submit failed, so a shareable support ticket was prepared instead."
+      );
     } finally {
       setSubmittingSupport(false);
     }
