@@ -882,42 +882,55 @@ function GnduDropdown({
         />
       </TouchableOpacity>
 
-      {open && (
-        <View
-          style={[
-            dropdownMenu,
-            { backgroundColor: theme.surfaceAlt, borderColor: theme.border },
-          ]}
+      <Modal transparent visible={open} animationType="fade" onRequestClose={onToggle}>
+        <Pressable
+          onPress={onToggle}
+          style={[dropdownBackdrop, { backgroundColor: theme.backdrop }]}
         >
-          {options.map((option) => {
-            const active = option.value === value;
+          <Pressable
+            style={[
+              dropdownSheet,
+              { backgroundColor: theme.surface, borderColor: theme.border },
+            ]}
+          >
+            <View style={modalHandle} />
 
-            return (
-              <TouchableOpacity
-                key={option.value}
-                activeOpacity={0.86}
-                onPress={() => onChange(option.value)}
-                style={[
-                  dropdownOption,
-                  {
-                    backgroundColor: active ? "#7c3aed" : "transparent",
-                    borderColor: active ? "#a78bfa" : theme.border,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    dropdownOptionText,
-                    { color: active ? "white" : theme.text },
-                  ]}
-                >
-                  {option.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      )}
+            <Text style={[dropdownSheetTitle, { color: theme.text }]}>
+              Select {label}
+            </Text>
+
+            <ScrollView style={dropdownScroll} showsVerticalScrollIndicator={false}>
+              {options.map((option) => {
+                const active = option.value === value;
+
+                return (
+                  <TouchableOpacity
+                    key={option.value}
+                    activeOpacity={0.86}
+                    onPress={() => onChange(option.value)}
+                    style={[
+                      dropdownOption,
+                      {
+                        backgroundColor: active ? "#7c3aed" : theme.input,
+                        borderColor: active ? "#a78bfa" : theme.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        dropdownOptionText,
+                        { color: active ? "white" : theme.text },
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -1157,20 +1170,36 @@ const dropdownChevron = {
   marginLeft: 10,
 };
 
-const dropdownMenu = {
+const dropdownBackdrop = {
+  flex: 1,
+  justifyContent: "flex-end" as const,
+  padding: 20,
+};
+
+const dropdownSheet = {
   borderWidth: 1,
-  borderRadius: 16,
-  padding: 6,
-  marginTop: 7,
+  borderRadius: 26,
+  padding: 18,
+  maxHeight: "62%" as const,
+};
+
+const dropdownSheetTitle = {
+  fontSize: 20,
+  fontWeight: "900" as const,
+  marginBottom: 14,
+};
+
+const dropdownScroll = {
+  maxHeight: 360,
 };
 
 const dropdownOption = {
-  minHeight: 40,
+  minHeight: 48,
   borderRadius: 12,
   borderWidth: 1,
-  paddingHorizontal: 10,
+  paddingHorizontal: 14,
   justifyContent: "center" as const,
-  marginBottom: 5,
+  marginBottom: 8,
 };
 
 const dropdownOptionText = {
