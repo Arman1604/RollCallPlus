@@ -26,7 +26,21 @@ https://rollcallplus-api.rollcallplus.workers.dev
 
 ```bash
 npm run lint
-npx tsc --noEmit
+npm run typecheck
+```
+
+## Builds
+
+Use the preview profile when you want an APK to install or share directly:
+
+```bash
+npx eas build -p android --profile preview
+```
+
+Use production when you are ready for a Play Store app bundle:
+
+```bash
+npx eas build -p android --profile production
 ```
 
 ## Backend
