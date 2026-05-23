@@ -4,5 +4,5 @@ compatibility_date = "2025-05-23"
 
 [vars]
 RAILWAY_BACKEND_URL = "https://rollcallplus-production.up.railway.app"
-USE_NATIVE_SCRAPER = "false"
+USE_NATIVE_SCRAPER = "true"
 NATIVE_FALLBACK_TO_RAILWAY = "true"
