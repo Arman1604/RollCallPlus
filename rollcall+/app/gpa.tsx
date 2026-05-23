@@ -17,6 +17,7 @@ import {
 import BottomTabs from "../components/BottomTabs";
 import { useAppStore } from "../store/useAppStore";
 import { useAppTheme } from "../theme/useAppTheme";
+import { GNDU_RESULT_URL } from "../utils/api";
 
 type ResultSubject = {
   name: string;
@@ -87,6 +88,20 @@ function getManualStorageKey(student: any) {
   return rollNumber ? `manualSGPA:${rollNumber}` : "manualSGPA";
 }
 
+function getGnduStorageKey(student: any) {
+  const rollNumber = String(student?.rollNumber || "").trim();
+  return rollNumber ? `gnduResults:${rollNumber}` : "gnduResults";
+}
+
+function getGnduRollNumber(student: any) {
+  return String(
+    student?.universityRollNo ||
+      student?.universityRollNumber ||
+      student?.rollNumber ||
+      ""
+  ).trim();
+}
+
 export default function GPATracker() {
   const theme = useAppTheme();
   const resultFromStore = useAppStore((state) => state.result) as ResultData | null;
@@ -112,23 +127,30 @@ export default function GPATracker() {
 
   const lawStudent = isLawStudent(student);
   const manualStorageKey = getManualStorageKey(student);
+  const gnduStorageKey = getGnduStorageKey(student);
+  const gnduRollNumber = getGnduRollNumber(student);
 
   const [semester, setSemester] = useState("");
   const [sgpaInput, setSgpaInput] = useState("");
   const [manualData, setManualData] = useState<ManualSGPA[]>([]);
+  const [gnduResults, setGnduResults] = useState<ResultData[]>([]);
+  const [gnduLoading, setGnduLoading] = useState(false);
   const [showSemesterPicker, setShowSemesterPicker] = useState(false);
   const [expandedArchiveSemester, setExpandedArchiveSemester] = useState<string | null>(
     null
   );
 
+  const allPortalResults = [...gnduResults, ...portalResults];
+
   const currentPortalResult =
+    gnduResults[0] ||
     resultFromStore ||
     portalResults.find((item) => item.selected) ||
     portalResults[0] ||
     result;
 
   const activeResult = currentPortalResult;
-  const otherPortalResults = portalResults.filter(
+  const otherPortalResults = allPortalResults.filter(
     (item) =>
       (item.semester || "") !== (activeResult?.semester || "") ||
       (item.sgpa || "") !== (activeResult?.sgpa || "")
@@ -175,6 +197,60 @@ export default function GPATracker() {
     loadManualData();
   }, [loadManualData]);
 
+  const loadGnduResults = useCallback(async () => {
+    try {
+      const saved = await AsyncStorage.getItem(gnduStorageKey);
+      setGnduResults(saved ? JSON.parse(saved) : []);
+    } catch (error) {
+      console.log("GNDU result load error:", error);
+    }
+  }, [gnduStorageKey]);
+
+  useEffect(() => {
+    loadGnduResults();
+  }, [loadGnduResults]);
+
+  async function fetchGnduResult() {
+    if (!gnduRollNumber) {
+      Alert.alert("GNDU Roll Number Missing", "University roll number is not available in your profile.");
+      return;
+    }
+
+    try {
+      setGnduLoading(true);
+
+      const response = await fetch(GNDU_RESULT_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          rollNumber: gnduRollNumber,
+        }),
+      });
+      const data = await response.json();
+
+      if (!response.ok || !data.available) {
+        Alert.alert(
+          "GNDU Result Not Found",
+          `${data.message || "Result is not available yet."}${
+            data.requestId ? `\n\nRequest ID: ${data.requestId}` : ""
+          }`
+        );
+        return;
+      }
+
+      const fetchedResults = data.results || [data.current].filter(Boolean);
+      setGnduResults(fetchedResults);
+      await AsyncStorage.setItem(gnduStorageKey, JSON.stringify(fetchedResults));
+    } catch (error) {
+      console.log("GNDU result fetch error:", error);
+      Alert.alert("GNDU Result Error", "Could not connect to GNDU result portal right now.");
+    } finally {
+      setGnduLoading(false);
+    }
+  }
+
   async function saveManualData(data: ManualSGPA[]) {
     setManualData(data);
     await AsyncStorage.setItem(manualStorageKey, JSON.stringify(data));
@@ -217,7 +293,7 @@ export default function GPATracker() {
     (item) => !isNaN(Number(item.sgpa)) && Number(item.sgpa) > 0
   );
 
-  const validPortalResults = (portalResults || []).filter(
+  const validPortalResults = (allPortalResults || []).filter(
     (item) =>
       item?.sgpa &&
       item.sgpa !== "0" &&
@@ -479,6 +555,25 @@ export default function GPATracker() {
 
           {lawStudent && (
             <>
+              <Text style={[sectionTitle, { color: theme.text }]}>GNDU Result Portal</Text>
+
+              <View style={[formCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <Text style={[emptyText, { color: theme.muted, textAlign: "left", marginBottom: 12 }]}>
+                  Fetch Law semester result from GNDU using university roll number{" "}
+                  {gnduRollNumber || "from your profile"}.
+                </Text>
+
+                <TouchableOpacity
+                  onPress={fetchGnduResult}
+                  disabled={gnduLoading}
+                  style={[button, { opacity: gnduLoading ? 0.72 : 1 }]}
+                >
+                  <Text style={buttonText}>
+                    {gnduLoading ? "Checking GNDU..." : "Fetch GNDU Result"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
               <Text style={[sectionTitle, { color: theme.text }]}>Law Semester SGPA</Text>
 
               <View style={[formCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>

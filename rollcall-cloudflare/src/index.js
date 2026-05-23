@@ -1,6 +1,8 @@
 import * as cheerio from "cheerio";
 
 const BASE_URL = "https://agclms.in";
+const GNDU_RESULT_URL =
+  "https://collegeadmissions.gndu.ac.in/studentarea/gnduexamresult.aspx";
 const CACHE_TTL = 3 * 60 * 1000;
 const MAX_LOGIN_BODY_BYTES = 4096;
 const LOGIN_IP_LIMIT = 30;
@@ -171,6 +173,30 @@ function validateLoginPayload(body, requestId) {
       rollNumber,
       password,
       forceRefresh: body.forceRefresh === true,
+    },
+  };
+}
+
+function validateGnduPayload(body, requestId) {
+  const rollNumber = String(body.rollNumber || "").trim();
+
+  if (!/^[0-9A-Za-z/-]{3,20}$/.test(rollNumber)) {
+    return {
+      response: json(
+        { message: "Valid GNDU roll number is required" },
+        400,
+        {},
+        requestId
+      ),
+    };
+  }
+
+  return {
+    payload: {
+      rollNumber,
+      year: String(body.year || ""),
+      month: String(body.month || ""),
+      courseType: String(body.courseType || ""),
     },
   };
 }
@@ -402,6 +428,200 @@ function extractResultFromPage($) {
     creditsEarned,
     resultStatus,
     subjects,
+  };
+}
+
+function getHiddenFields($) {
+  const params = new URLSearchParams();
+
+  $("input[type='hidden']").each((index, element) => {
+    const name = $(element).attr("name");
+    if (name) params.set(name, $(element).attr("value") || "");
+  });
+
+  return params;
+}
+
+function getSelectOptions($, selector) {
+  const options = [];
+
+  $(selector)
+    .find("option")
+    .each((index, element) => {
+      const value = $(element).attr("value") || "";
+      const text = cleanValue($(element).text());
+
+      if (value && text && text !== "Not Available") {
+        options.push({ value, text });
+      }
+    });
+
+  return options;
+}
+
+async function postGnduStep(html, values) {
+  const $ = cheerio.load(html);
+  const params = getHiddenFields($);
+
+  Object.entries({
+    __EVENTTARGET: "",
+    __EVENTARGUMENT: "",
+    __LASTFOCUS: "",
+    DrpDwnYear: "",
+    DrpDwnMonth: "",
+    DropDownCourseType: "",
+    DrpDwnCMaster: "",
+    DrpDwnCdetail: "",
+    textboxRno: "",
+    ...values,
+  }).forEach(([key, value]) => {
+    params.set(key, value);
+  });
+
+  const response = await fetch(GNDU_RESULT_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "User-Agent": "RollCallPlus-Cloudflare-GNDU",
+      Referer: GNDU_RESULT_URL,
+    },
+    body: params.toString(),
+  });
+
+  return await response.text();
+}
+
+function extractGnduResultFromPage(html, meta = {}) {
+  const $ = cheerio.load(html);
+  const result = extractResultFromPage($);
+  const pageText = cleanValue($("body").text());
+
+  if (result.sgpa === "0") {
+    const sgpaMatch = pageText.match(/(?:sgpa|grade point average)\s*[:\-]?\s*([0-9]+(?:\.[0-9]+)?)/i);
+    if (sgpaMatch) result.sgpa = sgpaMatch[1];
+  }
+
+  if (result.subjects.length === 0) {
+    $("tr").each((index, row) => {
+      const cells = $(row)
+        .find("td")
+        .map((cellIndex, cell) => cleanValue($(cell).text()))
+        .get()
+        .filter((value) => value && value !== "Not Available");
+
+      if (cells.length >= 4 && /[A-Z]{1,2}\+?|PASS|FAIL|REAPPEAR/i.test(cells[cells.length - 1])) {
+        result.subjects.push({
+          code: cells[0],
+          name: cells[1] || cells[0],
+          credits: cells.find((value) => /^[0-9]+(?:\.[0-9]+)?$/.test(value)) || "0",
+          grade: cells[cells.length - 1],
+        });
+      }
+    });
+  }
+
+  return {
+    available: result.sgpa !== "0" || result.subjects.length > 0,
+    semester: meta.semester || "GNDU Semester",
+    source: "GNDU",
+    ...result,
+  };
+}
+
+async function scrapeGnduResult(payload) {
+  const years = payload.year ? [payload.year] : ["2026", "2025", "2024"];
+  const months = payload.month ? [payload.month] : ["12", "5", "4", "9"];
+  const courseTypes = payload.courseType ? [payload.courseType] : ["C-", "P", "A", "C"];
+  const collected = [];
+
+  for (const year of years) {
+    for (const month of months) {
+      for (const courseType of courseTypes) {
+        let html = await fetch(GNDU_RESULT_URL, {
+          headers: { "User-Agent": "RollCallPlus-Cloudflare-GNDU" },
+        }).then((response) => response.text());
+
+        html = await postGnduStep(html, {
+          __EVENTTARGET: "DrpDwnYear",
+          DrpDwnYear: year,
+        });
+        html = await postGnduStep(html, {
+          __EVENTTARGET: "DrpDwnMonth",
+          DrpDwnYear: year,
+          DrpDwnMonth: month,
+        });
+        html = await postGnduStep(html, {
+          __EVENTTARGET: "DropDownCourseType",
+          DrpDwnYear: year,
+          DrpDwnMonth: month,
+          DropDownCourseType: courseType,
+        });
+
+        const coursePage = cheerio.load(html);
+        const lawCourses = getSelectOptions(coursePage, "#DrpDwnCMaster").filter(
+          (item) => /law|ll\.?b|b\.?\s*a|bba|b\.?\s*com/i.test(item.text)
+        );
+
+        for (const course of lawCourses) {
+          let semesterHtml = await postGnduStep(html, {
+            __EVENTTARGET: "DrpDwnCMaster",
+            DrpDwnYear: year,
+            DrpDwnMonth: month,
+            DropDownCourseType: courseType,
+            DrpDwnCMaster: course.value,
+          });
+          const semesterPage = cheerio.load(semesterHtml);
+          const semesters = getSelectOptions(semesterPage, "#DrpDwnCdetail");
+
+          for (const semester of semesters) {
+            const readyHtml = await postGnduStep(semesterHtml, {
+              __EVENTTARGET: "DrpDwnCdetail",
+              DrpDwnYear: year,
+              DrpDwnMonth: month,
+              DropDownCourseType: courseType,
+              DrpDwnCMaster: course.value,
+              DrpDwnCdetail: semester.value,
+            });
+            const resultHtml = await postGnduStep(readyHtml, {
+              DrpDwnYear: year,
+              DrpDwnMonth: month,
+              DropDownCourseType: courseType,
+              DrpDwnCMaster: course.value,
+              DrpDwnCdetail: semester.value,
+              textboxRno: payload.rollNumber,
+              buttonShowResult: "Submit",
+            });
+            const result = extractGnduResultFromPage(resultHtml, {
+              semester: semester.text,
+            });
+
+            if (result.available) {
+              collected.push({
+                ...result,
+                course: course.text,
+                year,
+                month,
+                courseType,
+              });
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (collected.length === 0) {
+    return {
+      available: false,
+      message: "GNDU result not found for this roll number yet",
+      results: [],
+    };
+  }
+
+  return {
+    available: true,
+    current: collected[0],
+    results: collected,
   };
 }
 
@@ -994,6 +1214,50 @@ async function handleLogin(request, env, requestId) {
   }
 }
 
+async function handleGnduResult(request, requestId) {
+  const bodyResult = await readJsonBody(request, requestId);
+  if (bodyResult.response) {
+    return bodyResult.response;
+  }
+
+  const validation = validateGnduPayload(bodyResult.body, requestId);
+  if (validation.response) {
+    return validation.response;
+  }
+
+  try {
+    const data = await scrapeGnduResult(validation.payload);
+
+    return json(
+      {
+        ...data,
+        runtime: "cloudflare-gndu",
+      },
+      data.available ? 200 : 404,
+      {},
+      requestId
+    );
+  } catch (error) {
+    logEvent("error", "gndu.scraper_failed", {
+      requestId,
+      route: "/gndu-result",
+      runtime: "cloudflare-gndu",
+      status: 500,
+      error: String(error?.message || error),
+    });
+
+    return json(
+      {
+        message: "GNDU result scraper failed",
+        error: String(error?.message || error),
+      },
+      500,
+      {},
+      requestId
+    );
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -1034,6 +1298,14 @@ export default {
         }
 
         return handleLogin(request, env, requestId);
+      }
+
+      if (url.pathname === "/gndu-result") {
+        if (request.method !== "POST") {
+          return json({ message: "Method not allowed" }, 405, {}, requestId);
+        }
+
+        return handleGnduResult(request, requestId);
       }
 
       return json({ message: "Not found" }, 404, {}, requestId);
