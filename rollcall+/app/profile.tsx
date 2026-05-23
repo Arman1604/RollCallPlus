@@ -12,6 +12,7 @@ import {
   ScrollView,
   Share,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -35,6 +36,19 @@ type SavedAccount = {
   result: any;
   results?: any[];
 };
+
+type SupportCategory = "Login" | "Attendance" | "GPA/GNDU" | "Account" | "App Bug";
+type SupportPriority = "Normal" | "Urgent";
+
+const SUPPORT_CATEGORIES: SupportCategory[] = [
+  "Login",
+  "Attendance",
+  "GPA/GNDU",
+  "Account",
+  "App Bug",
+];
+
+const SUPPORT_PRIORITIES: SupportPriority[] = ["Normal", "Urgent"];
 
 function percentage(attended: number, total: number) {
   if (total === 0) return 0;
@@ -74,7 +88,12 @@ export default function Profile() {
   const theme = useAppTheme();
   const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>([]);
   const [showAccountPicker, setShowAccountPicker] = useState(false);
-  const [reportingIssue, setReportingIssue] = useState(false);
+  const [showSupportCenter, setShowSupportCenter] = useState(false);
+  const [supportCategory, setSupportCategory] = useState<SupportCategory>("Attendance");
+  const [supportPriority, setSupportPriority] = useState<SupportPriority>("Normal");
+  const [supportContact, setSupportContact] = useState("");
+  const [supportMessage, setSupportMessage] = useState("");
+  const [submittingSupport, setSubmittingSupport] = useState(false);
 
   const totalAttended = subjects.reduce((sum, s) => sum + (s.attended || 0), 0);
   const totalMissed = subjects.reduce((sum, s) => sum + (s.missed || 0), 0);
@@ -178,9 +197,14 @@ export default function Profile() {
     await AsyncStorage.setItem("rollcall_theme", nextTheme);
   }
 
-  async function reportIssue() {
+  async function submitSupportTicket() {
+    if (!supportMessage.trim()) {
+      Alert.alert("Support", "Please describe the issue first.");
+      return;
+    }
+
     try {
-      setReportingIssue(true);
+      setSubmittingSupport(true);
 
       let requestId = "Not available";
       let backendStatus = "Not checked";
@@ -195,24 +219,34 @@ export default function Profile() {
         backendStatus = "Health check failed";
       }
 
+      const ticketId = `RC-${Date.now().toString().slice(-6)}`;
+
       await Share.share({
-        title: "RollCall+ issue report",
+        title: "RollCall+ support ticket",
         message: [
-          "RollCall+ Issue Report",
+          "RollCall+ Support Ticket",
           "",
+          `Ticket: ${ticketId}`,
+          `Category: ${supportCategory}`,
+          `Priority: ${supportPriority}`,
+          `Contact: ${supportContact.trim() || "Not provided"}`,
           `App: ${appLabel}`,
           `Backend: ${backendStatus}`,
           `Request ID: ${requestId}`,
           `API: ${API_BASE_URL}`,
           `Roll No: ${student?.rollNumber || "Not available"}`,
           "",
-          "What happened:",
+          "Issue:",
+          supportMessage.trim(),
         ].join("\n"),
       });
+      setShowSupportCenter(false);
+      setSupportMessage("");
+      Alert.alert("Support Ticket Ready", `Ticket ${ticketId} has been prepared.`);
     } catch {
-      Alert.alert("Report Issue", "Could not open the report sheet right now.");
+      Alert.alert("Support", "Could not prepare the support ticket right now.");
     } finally {
-      setReportingIssue(false);
+      setSubmittingSupport(false);
     }
   }
 
@@ -359,13 +393,12 @@ export default function Profile() {
           <View style={actionPanel}>
             <ActionButton
               icon="chatbox-ellipses-outline"
-              title={reportingIssue ? "Preparing Report" : "Report Issue"}
-              subtitle="Share app version and safe debug info"
+              title="Support Center"
+              subtitle="Create a support ticket with app details"
               color="#38bdf8"
               backgroundColor="#0ea5e922"
               borderColor="#0ea5e966"
-              onPress={reportIssue}
-              disabled={reportingIssue}
+              onPress={() => setShowSupportCenter(true)}
             />
 
             <ActionButton
@@ -426,6 +459,109 @@ export default function Profile() {
                 <Ionicons name="chevron-forward" size={22} color={theme.subtle} />
               </TouchableOpacity>
             ))}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal transparent visible={showSupportCenter} animationType="slide">
+        <Pressable
+          onPress={() => setShowSupportCenter(false)}
+          style={[modalBackdrop, { backgroundColor: theme.backdrop }]}
+        >
+          <Pressable style={[supportModal, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <View style={modalHandle} />
+
+            <Text style={[modalTitle, { color: theme.text }]}>Support Center</Text>
+            <Text style={[modalSubtitle, { color: theme.muted }]}>
+              Send a support ticket with safe app and portal details.
+            </Text>
+
+            <Text style={[supportLabel, { color: theme.subtle }]}>Category</Text>
+            <View style={supportChipRow}>
+              {SUPPORT_CATEGORIES.map((category) => (
+                <TouchableOpacity
+                  key={category}
+                  activeOpacity={0.86}
+                  onPress={() => setSupportCategory(category)}
+                  style={[
+                    supportChip,
+                    {
+                      backgroundColor:
+                        supportCategory === category ? theme.primary : theme.input,
+                      borderColor:
+                        supportCategory === category ? "#a78bfa" : theme.border,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      supportChipText,
+                      { color: supportCategory === category ? "#ffffff" : theme.text },
+                    ]}
+                  >
+                    {category}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={[supportLabel, { color: theme.subtle }]}>Priority</Text>
+            <View style={supportChipRow}>
+              {SUPPORT_PRIORITIES.map((priority) => (
+                <TouchableOpacity
+                  key={priority}
+                  activeOpacity={0.86}
+                  onPress={() => setSupportPriority(priority)}
+                  style={[
+                    supportChip,
+                    {
+                      backgroundColor:
+                        supportPriority === priority ? theme.primary : theme.input,
+                      borderColor:
+                        supportPriority === priority ? "#a78bfa" : theme.border,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      supportChipText,
+                      { color: supportPriority === priority ? "#ffffff" : theme.text },
+                    ]}
+                  >
+                    {priority}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TextInput
+              placeholder="Contact email or phone"
+              placeholderTextColor={theme.subtle}
+              value={supportContact}
+              onChangeText={setSupportContact}
+              style={[supportInput, { backgroundColor: theme.input, color: theme.text, borderColor: theme.borderStrong }]}
+            />
+
+            <TextInput
+              placeholder="Describe what happened"
+              placeholderTextColor={theme.subtle}
+              value={supportMessage}
+              onChangeText={setSupportMessage}
+              multiline
+              textAlignVertical="top"
+              style={[supportMessageInput, { backgroundColor: theme.input, color: theme.text, borderColor: theme.borderStrong }]}
+            />
+
+            <TouchableOpacity
+              activeOpacity={0.86}
+              disabled={submittingSupport}
+              onPress={submitSupportTicket}
+              style={[supportSubmit, { opacity: submittingSupport ? 0.7 : 1 }]}
+            >
+              <Text style={supportSubmitText}>
+                {submittingSupport ? "Preparing Ticket..." : "Create Support Ticket"}
+              </Text>
+            </TouchableOpacity>
           </Pressable>
         </Pressable>
       </Modal>
@@ -671,6 +807,16 @@ const accountModal = {
   borderColor: "#1e293b",
 };
 
+const supportModal = {
+  backgroundColor: "#0f172a",
+  padding: 22,
+  borderTopLeftRadius: 34,
+  borderTopRightRadius: 34,
+  borderWidth: 1,
+  borderColor: "#1e293b",
+  maxHeight: "88%" as const,
+};
+
 const modalHandle = {
   width: 48,
   height: 5,
@@ -691,6 +837,64 @@ const modalSubtitle = {
   marginTop: 6,
   marginBottom: 16,
   fontWeight: "700" as const,
+};
+
+const supportLabel = {
+  color: "#64748b",
+  fontSize: 13,
+  fontWeight: "900" as const,
+  marginTop: 8,
+  marginBottom: 8,
+};
+
+const supportChipRow = {
+  flexDirection: "row" as const,
+  flexWrap: "wrap" as const,
+  gap: 8,
+  marginBottom: 10,
+};
+
+const supportChip = {
+  paddingHorizontal: 12,
+  paddingVertical: 10,
+  borderRadius: 999,
+  borderWidth: 1,
+};
+
+const supportChipText = {
+  fontWeight: "900" as const,
+  fontSize: 13,
+};
+
+const supportInput = {
+  padding: 14,
+  borderRadius: 18,
+  borderWidth: 1,
+  fontSize: 16,
+  marginTop: 8,
+};
+
+const supportMessageInput = {
+  minHeight: 120,
+  padding: 14,
+  borderRadius: 18,
+  borderWidth: 1,
+  fontSize: 16,
+  marginTop: 12,
+};
+
+const supportSubmit = {
+  backgroundColor: "#7c3aed",
+  borderRadius: 18,
+  padding: 16,
+  alignItems: "center" as const,
+  marginTop: 14,
+};
+
+const supportSubmitText = {
+  color: "#ffffff",
+  fontSize: 16,
+  fontWeight: "900" as const,
 };
 
 const accountItem = {
