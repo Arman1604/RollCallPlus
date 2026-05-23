@@ -37,6 +37,13 @@ type ResultData = {
   subjects?: ResultSubject[];
 };
 
+type GnduDropdownKey = "year" | "month" | "courseType" | "semester";
+
+type GnduOption = {
+  label: string;
+  value: string;
+};
+
 function getGradeColor(grade: string) {
   const g = String(grade || "").toUpperCase();
   const numericGrade = Number(g);
@@ -135,7 +142,10 @@ function mergeResultHistory(existing: ResultData[], incoming: ResultData[]) {
   return Array.from(merged.values());
 }
 
-const GNDU_YEAR_OPTIONS = ["2026", "2025", "2024", "2023"];
+const GNDU_YEAR_OPTIONS = ["2026", "2025", "2024", "2023"].map((year) => ({
+  label: year,
+  value: year,
+}));
 
 const GNDU_MONTH_OPTIONS = [
   { label: "April", value: "4" },
@@ -197,6 +207,8 @@ export default function GPATracker() {
   const [gnduSemesterCodeInput, setGnduSemesterCodeInput] = useState("112403");
   const [gnduResults, setGnduResults] = useState<ResultData[]>([]);
   const [gnduLoading, setGnduLoading] = useState(false);
+  const [openGnduDropdown, setOpenGnduDropdown] =
+    useState<GnduDropdownKey | null>(null);
   const [showSemesterPicker, setShowSemesterPicker] = useState(false);
   const [expandedArchiveSemester, setExpandedArchiveSemester] = useState<string | null>(
     null
@@ -599,81 +611,49 @@ export default function GPATracker() {
                   </Text>
                 </View>
 
-                <Text style={[fieldLabel, { color: theme.muted }]}>Year</Text>
-                <View style={optionRow}>
-                  {GNDU_YEAR_OPTIONS.map((year) => (
-                    <TouchableOpacity
-                      key={year}
-                      activeOpacity={0.86}
-                      onPress={() => setGnduYearInput(year)}
-                      style={[
-                        optionChip,
-                        {
-                          backgroundColor:
-                            gnduYearInput === year ? "#7c3aed" : theme.input,
-                          borderColor:
-                            gnduYearInput === year ? "#a78bfa" : theme.border,
-                        },
-                      ]}
-                    >
-                      <Text style={[optionChipText, { color: gnduYearInput === year ? "white" : theme.text }]}>
-                        {year}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                <GnduDropdown
+                  label="Year"
+                  options={GNDU_YEAR_OPTIONS}
+                  value={gnduYearInput}
+                  open={openGnduDropdown === "year"}
+                  onToggle={() =>
+                    setOpenGnduDropdown(openGnduDropdown === "year" ? null : "year")
+                  }
+                  onChange={(value) => {
+                    setGnduYearInput(value);
+                    setOpenGnduDropdown(null);
+                  }}
+                />
 
-                <Text style={[fieldLabel, { color: theme.muted }]}>Month</Text>
-                <View style={optionRow}>
-                  {GNDU_MONTH_OPTIONS.map((month) => (
-                    <TouchableOpacity
-                      key={month.value}
-                      activeOpacity={0.86}
-                      onPress={() => setGnduMonthInput(month.value)}
-                      style={[
-                        optionChip,
-                        {
-                          backgroundColor:
-                            gnduMonthInput === month.value ? "#7c3aed" : theme.input,
-                          borderColor:
-                            gnduMonthInput === month.value ? "#a78bfa" : theme.border,
-                        },
-                      ]}
-                    >
-                      <Text style={[optionChipText, { color: gnduMonthInput === month.value ? "white" : theme.text }]}>
-                        {month.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                <GnduDropdown
+                  label="Month"
+                  options={GNDU_MONTH_OPTIONS}
+                  value={gnduMonthInput}
+                  open={openGnduDropdown === "month"}
+                  onToggle={() =>
+                    setOpenGnduDropdown(openGnduDropdown === "month" ? null : "month")
+                  }
+                  onChange={(value) => {
+                    setGnduMonthInput(value);
+                    setOpenGnduDropdown(null);
+                  }}
+                />
 
-                <Text style={[fieldLabel, { color: theme.muted }]}>Course Type</Text>
-                <View style={optionRow}>
-                  {GNDU_COURSE_TYPE_OPTIONS.map((courseType) => (
-                    <TouchableOpacity
-                      key={courseType.value}
-                      activeOpacity={0.86}
-                      onPress={() => setGnduCourseTypeInput(courseType.value)}
-                      style={[
-                        optionChip,
-                        {
-                          backgroundColor:
-                            gnduCourseTypeInput === courseType.value
-                              ? "#7c3aed"
-                              : theme.input,
-                          borderColor:
-                            gnduCourseTypeInput === courseType.value
-                              ? "#a78bfa"
-                              : theme.border,
-                        },
-                      ]}
-                    >
-                      <Text style={[optionChipText, { color: gnduCourseTypeInput === courseType.value ? "white" : theme.text }]}>
-                        {courseType.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                <GnduDropdown
+                  label="Course Type"
+                  options={GNDU_COURSE_TYPE_OPTIONS}
+                  value={gnduCourseTypeInput}
+                  open={openGnduDropdown === "courseType"}
+                  onToggle={() =>
+                    setOpenGnduDropdown(
+                      openGnduDropdown === "courseType" ? null : "courseType"
+                    )
+                  }
+                  onChange={(value) => {
+                    setGnduCourseTypeInput(value);
+                    setOpenGnduDropdown(null);
+                  }}
+                />
 
                 <View style={[detectedCourseBox, { backgroundColor: theme.input, borderColor: theme.border }]}>
                   <Text style={[fieldLabel, { color: theme.muted, marginTop: 0, marginBottom: 4 }]}>Detected Course</Text>
@@ -682,33 +662,21 @@ export default function GPATracker() {
                   </Text>
                 </View>
 
-                <Text style={[fieldLabel, { color: theme.muted }]}>Semester</Text>
-                <View style={optionRow}>
-                  {gnduSemesterOptions.map((semesterOption) => (
-                    <TouchableOpacity
-                      key={semesterOption.value}
-                      activeOpacity={0.86}
-                      onPress={() => setGnduSemesterCodeInput(semesterOption.value)}
-                      style={[
-                        semesterChip,
-                        {
-                          backgroundColor:
-                            gnduSemesterCodeInput === semesterOption.value
-                              ? "#7c3aed"
-                              : theme.input,
-                          borderColor:
-                            gnduSemesterCodeInput === semesterOption.value
-                              ? "#a78bfa"
-                              : theme.border,
-                        },
-                      ]}
-                    >
-                      <Text style={[optionChipText, { color: gnduSemesterCodeInput === semesterOption.value ? "white" : theme.text }]}>
-                        {semesterOption.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                <GnduDropdown
+                  label="Semester"
+                  options={gnduSemesterOptions}
+                  value={gnduSemesterCodeInput}
+                  open={openGnduDropdown === "semester"}
+                  onToggle={() =>
+                    setOpenGnduDropdown(
+                      openGnduDropdown === "semester" ? null : "semester"
+                    )
+                  }
+                  onChange={(value) => {
+                    setGnduSemesterCodeInput(value);
+                    setOpenGnduDropdown(null);
+                  }}
+                />
 
                 <Text style={[mutedText, { color: theme.subtle, marginBottom: 12 }]}>
                   Searching {selectedGnduMonth} {gnduYearInput}, {selectedGnduCourseType}, {selectedGnduSemester}.
@@ -856,6 +824,85 @@ function InfoCard({ title, value, color }: { title: string; value: string; color
       >
         {value}
       </Text>
+    </View>
+  );
+}
+
+function GnduDropdown({
+  label,
+  options,
+  value,
+  open,
+  onToggle,
+  onChange,
+}: {
+  label: string;
+  options: GnduOption[];
+  value: string;
+  open: boolean;
+  onToggle: () => void;
+  onChange: (value: string) => void;
+}) {
+  const theme = useAppTheme();
+  const selected = options.find((option) => option.value === value);
+
+  return (
+    <View style={dropdownWrap}>
+      <Text style={[fieldLabel, { color: theme.muted }]}>{label}</Text>
+
+      <TouchableOpacity
+        activeOpacity={0.86}
+        onPress={onToggle}
+        style={[
+          dropdownButton,
+          { backgroundColor: theme.input, borderColor: open ? "#a78bfa" : theme.border },
+        ]}
+      >
+        <Text style={[dropdownValue, { color: theme.text }]}>
+          {selected?.label || value || "Select"}
+        </Text>
+
+        <Text style={[dropdownArrow, { color: open ? "#8b5cf6" : theme.muted }]}>
+          {open ? "^" : "v"}
+        </Text>
+      </TouchableOpacity>
+
+      {open && (
+        <View
+          style={[
+            dropdownMenu,
+            { backgroundColor: theme.surfaceAlt, borderColor: theme.border },
+          ]}
+        >
+          {options.map((option) => {
+            const active = option.value === value;
+
+            return (
+              <TouchableOpacity
+                key={option.value}
+                activeOpacity={0.86}
+                onPress={() => onChange(option.value)}
+                style={[
+                  dropdownOption,
+                  {
+                    backgroundColor: active ? "#7c3aed" : "transparent",
+                    borderColor: active ? "#a78bfa" : theme.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    dropdownOptionText,
+                    { color: active ? "white" : theme.text },
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
     </View>
   );
 }
@@ -1053,37 +1100,6 @@ const fieldLabel = {
   marginBottom: 8,
 };
 
-const optionRow = {
-  flexDirection: "row" as const,
-  flexWrap: "wrap" as const,
-  gap: 8,
-  marginBottom: 12,
-};
-
-const optionChip = {
-  width: "48%" as const,
-  minHeight: 48,
-  justifyContent: "center" as const,
-  paddingHorizontal: 12,
-  paddingVertical: 10,
-  borderRadius: 16,
-  borderWidth: 1,
-};
-
-const semesterChip = {
-  width: "31%" as const,
-  alignItems: "center" as const,
-  paddingHorizontal: 8,
-  paddingVertical: 10,
-  borderRadius: 16,
-  borderWidth: 1,
-};
-
-const optionChipText = {
-  fontSize: 14,
-  fontWeight: "900" as const,
-};
-
 const detectedCourseBox = {
   padding: 12,
   borderRadius: 18,
@@ -1093,6 +1109,51 @@ const detectedCourseBox = {
 
 const detectedCourseText = {
   fontSize: 16,
+  fontWeight: "900" as const,
+};
+
+const dropdownWrap = {
+  marginBottom: 12,
+};
+
+const dropdownButton = {
+  minHeight: 54,
+  borderRadius: 18,
+  borderWidth: 1,
+  paddingHorizontal: 16,
+  flexDirection: "row" as const,
+  alignItems: "center" as const,
+  justifyContent: "space-between" as const,
+};
+
+const dropdownValue = {
+  fontSize: 16,
+  fontWeight: "900" as const,
+};
+
+const dropdownArrow = {
+  fontSize: 18,
+  fontWeight: "900" as const,
+};
+
+const dropdownMenu = {
+  borderWidth: 1,
+  borderRadius: 18,
+  padding: 8,
+  marginTop: 8,
+};
+
+const dropdownOption = {
+  minHeight: 44,
+  borderRadius: 14,
+  borderWidth: 1,
+  paddingHorizontal: 12,
+  justifyContent: "center" as const,
+  marginBottom: 6,
+};
+
+const dropdownOptionText = {
+  fontSize: 15,
   fontWeight: "900" as const,
 };
 
