@@ -135,8 +135,8 @@ export default function GPATracker() {
   const [sgpaInput, setSgpaInput] = useState("");
   const [gnduRollInput, setGnduRollInput] = useState(gnduRollNumber);
   const [gnduYearInput, setGnduYearInput] = useState("2025");
-  const [gnduMonthInput, setGnduMonthInput] = useState("5");
-  const [gnduCourseTypeInput, setGnduCourseTypeInput] = useState("C-");
+  const [gnduMonthInput, setGnduMonthInput] = useState("12");
+  const [gnduCourseTypeInput, setGnduCourseTypeInput] = useState("T");
   const [manualData, setManualData] = useState<ManualSGPA[]>([]);
   const [gnduResults, setGnduResults] = useState<ResultData[]>([]);
   const [gnduLoading, setGnduLoading] = useState(false);

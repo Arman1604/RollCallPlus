@@ -459,7 +459,7 @@ function getSelectOptions($, selector) {
   return options;
 }
 
-async function postGnduStep(html, values) {
+async function postGnduStep(client, html, values) {
   const $ = cheerio.load(html);
   const params = getHiddenFields($);
 
@@ -478,17 +478,84 @@ async function postGnduStep(html, values) {
     params.set(key, value);
   });
 
-  const response = await fetch(GNDU_RESULT_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      "User-Agent": "RollCallPlus-Cloudflare-GNDU",
+  const response = await client.postForm(
+    GNDU_RESULT_URL,
+    params.toString(),
+    {
       Referer: GNDU_RESULT_URL,
-    },
-    body: params.toString(),
-  });
+    }
+  );
 
-  return await response.text();
+  return response.text;
+}
+
+class GnduClient {
+  constructor() {
+    this.cookies = new Map();
+  }
+
+  storeCookies(headers) {
+    const getSetCookie =
+      typeof headers.getSetCookie === "function"
+        ? headers.getSetCookie()
+        : splitSetCookieHeader(headers.get("set-cookie"));
+
+    getSetCookie.forEach((cookie) => {
+      const pair = cookie.split(";")[0];
+      const index = pair.indexOf("=");
+      if (index <= 0) return;
+      this.cookies.set(pair.slice(0, index), pair.slice(index + 1));
+    });
+  }
+
+  cookieHeader() {
+    return Array.from(this.cookies.entries())
+      .map(([key, value]) => `${key}=${value}`)
+      .join("; ");
+  }
+
+  async request(url, options = {}) {
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        "User-Agent": "RollCallPlus-Cloudflare-GNDU",
+        ...(this.cookieHeader() ? { Cookie: this.cookieHeader() } : {}),
+        ...(options.headers || {}),
+      },
+    });
+
+    this.storeCookies(response.headers);
+    return response;
+  }
+
+  async get(url) {
+    const response = await this.request(url, {
+      method: "GET",
+    });
+
+    return {
+      response,
+      text: await response.text(),
+      url: response.url,
+    };
+  }
+
+  async postForm(url, body, headers = {}) {
+    const response = await this.request(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        ...headers,
+      },
+      body,
+    });
+
+    return {
+      response,
+      text: await response.text(),
+      url: response.url,
+    };
+  }
 }
 
 function extractGnduResultFromPage(html, meta = {}) {
@@ -540,25 +607,24 @@ async function scrapeGnduResult(payload) {
     lawCoursesFound: 0,
     semestersChecked: 0,
   };
+  const client = new GnduClient();
 
   for (const year of years) {
     for (const month of months) {
       for (const courseType of courseTypes) {
         diagnostics.sessionsChecked += 1;
-        let html = await fetch(GNDU_RESULT_URL, {
-          headers: { "User-Agent": "RollCallPlus-Cloudflare-GNDU" },
-        }).then((response) => response.text());
+        let html = (await client.get(GNDU_RESULT_URL)).text;
 
-        html = await postGnduStep(html, {
+        html = await postGnduStep(client, html, {
           __EVENTTARGET: "DrpDwnYear",
           DrpDwnYear: year,
         });
-        html = await postGnduStep(html, {
+        html = await postGnduStep(client, html, {
           __EVENTTARGET: "DrpDwnMonth",
           DrpDwnYear: year,
           DrpDwnMonth: month,
         });
-        html = await postGnduStep(html, {
+        html = await postGnduStep(client, html, {
           __EVENTTARGET: "DropDownCourseType",
           DrpDwnYear: year,
           DrpDwnMonth: month,
@@ -575,7 +641,7 @@ async function scrapeGnduResult(payload) {
         diagnostics.lawCoursesFound += lawCourses.length;
 
         for (const course of lawCourses) {
-          let semesterHtml = await postGnduStep(html, {
+          let semesterHtml = await postGnduStep(client, html, {
             __EVENTTARGET: "DrpDwnCMaster",
             DrpDwnYear: year,
             DrpDwnMonth: month,
@@ -587,7 +653,7 @@ async function scrapeGnduResult(payload) {
 
           for (const semester of semesters) {
             diagnostics.semestersChecked += 1;
-            const readyHtml = await postGnduStep(semesterHtml, {
+            const readyHtml = await postGnduStep(client, semesterHtml, {
               __EVENTTARGET: "DrpDwnCdetail",
               DrpDwnYear: year,
               DrpDwnMonth: month,
@@ -595,7 +661,7 @@ async function scrapeGnduResult(payload) {
               DrpDwnCMaster: course.value,
               DrpDwnCdetail: semester.value,
             });
-            const resultHtml = await postGnduStep(readyHtml, {
+            const resultHtml = await postGnduStep(client, readyHtml, {
               DrpDwnYear: year,
               DrpDwnMonth: month,
               DropDownCourseType: courseType,
