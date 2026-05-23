@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Stack, router } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   ActivityIndicator,
@@ -57,11 +57,7 @@ export default function Dashboard() {
     registerBackgroundSync();
   }, []);
 
-  useEffect(() => {
-    if (!student) loadSavedUser();
-  }, [student]);
-
-  async function loadSavedUser() {
+  const loadSavedUser = useCallback(async () => {
     try {
       const savedUser = await AsyncStorage.getItem("rollcall_user");
 
@@ -86,7 +82,11 @@ export default function Dashboard() {
       console.log("Dashboard session load error:", error);
       router.replace("/");
     }
-  }
+  }, [setUserData]);
+
+  useEffect(() => {
+    if (!student) loadSavedUser();
+  }, [student, loadSavedUser]);
 
   async function refreshAttendance() {
     if (!student?.rollNumber || !password) return;

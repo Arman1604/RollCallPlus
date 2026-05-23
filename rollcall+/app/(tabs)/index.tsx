@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { router, Stack } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
   ActivityIndicator,
@@ -47,38 +47,36 @@ export default function LoginScreen() {
 
   const setUserData = useAppStore.getState().setUserData;
 
-  useEffect(() => {
-    checkSavedLogin();
-    loadSavedAccounts();
+  const loadSavedAccounts = useCallback(async () => {
+    try {
+      const raw = await AsyncStorage.getItem("rollcall_accounts");
+      setSavedAccounts(raw ? JSON.parse(raw) : []);
+    } catch (error) {
+      console.log("Saved accounts load error:", error);
+    }
   }, []);
 
-  async function checkSavedLogin() {
-    try {
-      const savedUser = await AsyncStorage.getItem("rollcall_user");
-      if (!savedUser) return;
+  const saveAccount = useCallback(async (account: SavedAccount) => {
+    await AsyncStorage.setItem("rollcall_user", JSON.stringify(account));
 
-      const parsedUser: SavedAccount = JSON.parse(savedUser);
+    const oldRaw = await AsyncStorage.getItem("rollcall_accounts");
+    const oldAccounts: SavedAccount[] = oldRaw ? JSON.parse(oldRaw) : [];
 
-      if (parsedUser.rollNumber && parsedUser.password) {
-        await refreshSavedLogin(parsedUser);
-        return;
-      }
+    const withoutDuplicate = oldAccounts.filter(
+      (acc) => acc.rollNumber !== account.rollNumber
+    );
 
-      setUserData({
-        student: parsedUser.student,
-        attendance: parsedUser.attendance || [],
-        result: parsedUser.result || null,
-        results: parsedUser.results || [],
-        password: parsedUser.password || "",
-      });
+    const updatedAccounts = [account, ...withoutDuplicate];
 
-      router.replace("/dashboard");
-    } catch (error) {
-      console.log("Auto login failed:", error);
-    }
-  }
+    await AsyncStorage.setItem(
+      "rollcall_accounts",
+      JSON.stringify(updatedAccounts)
+    );
 
-  async function refreshSavedLogin(account: SavedAccount) {
+    setSavedAccounts(updatedAccounts);
+  }, []);
+
+  const refreshSavedLogin = useCallback(async (account: SavedAccount) => {
     try {
       const response = await fetch(LOGIN_URL, {
         method: "POST",
@@ -130,36 +128,38 @@ export default function LoginScreen() {
 
       router.replace("/dashboard");
     }
-  }
+  }, [saveAccount, setUserData]);
 
-  async function loadSavedAccounts() {
+  const checkSavedLogin = useCallback(async () => {
     try {
-      const raw = await AsyncStorage.getItem("rollcall_accounts");
-      setSavedAccounts(raw ? JSON.parse(raw) : []);
+      const savedUser = await AsyncStorage.getItem("rollcall_user");
+      if (!savedUser) return;
+
+      const parsedUser: SavedAccount = JSON.parse(savedUser);
+
+      if (parsedUser.rollNumber && parsedUser.password) {
+        await refreshSavedLogin(parsedUser);
+        return;
+      }
+
+      setUserData({
+        student: parsedUser.student,
+        attendance: parsedUser.attendance || [],
+        result: parsedUser.result || null,
+        results: parsedUser.results || [],
+        password: parsedUser.password || "",
+      });
+
+      router.replace("/dashboard");
     } catch (error) {
-      console.log("Saved accounts load error:", error);
+      console.log("Auto login failed:", error);
     }
-  }
+  }, [refreshSavedLogin, setUserData]);
 
-  async function saveAccount(account: SavedAccount) {
-    await AsyncStorage.setItem("rollcall_user", JSON.stringify(account));
-
-    const oldRaw = await AsyncStorage.getItem("rollcall_accounts");
-    const oldAccounts: SavedAccount[] = oldRaw ? JSON.parse(oldRaw) : [];
-
-    const withoutDuplicate = oldAccounts.filter(
-      (acc) => acc.rollNumber !== account.rollNumber
-    );
-
-    const updatedAccounts = [account, ...withoutDuplicate];
-
-    await AsyncStorage.setItem(
-      "rollcall_accounts",
-      JSON.stringify(updatedAccounts)
-    );
-
-    setSavedAccounts(updatedAccounts);
-  }
+  useEffect(() => {
+    checkSavedLogin();
+    loadSavedAccounts();
+  }, [checkSavedLogin, loadSavedAccounts]);
 
   async function openSavedAccount(account: SavedAccount) {
     try {
