@@ -604,79 +604,87 @@ export default function GPATracker() {
                   style={[input, { backgroundColor: theme.input, color: theme.text, borderColor: theme.borderStrong }]}
                 />
 
-                <View style={[gnduGuideBox, { backgroundColor: theme.surfaceAlt, borderColor: theme.border }]}>
-                  <Text style={[gnduGuideTitle, { color: theme.text }]}>How to choose</Text>
-                  <Text style={[gnduGuideText, { color: theme.muted }]}>
-                    Pick the result year, exam session, course type, and semester. No date is needed.
-                  </Text>
+                <Text style={[gnduHelpLine, { color: theme.subtle }]}>
+                  Pick result year, exam session, course type, and semester. No date needed.
+                </Text>
+
+                <View style={dropdownGrid}>
+                  <View style={dropdownGridItem}>
+                    <GnduDropdown
+                      label="Year"
+                      options={GNDU_YEAR_OPTIONS}
+                      value={gnduYearInput}
+                      open={openGnduDropdown === "year"}
+                      onToggle={() =>
+                        setOpenGnduDropdown(openGnduDropdown === "year" ? null : "year")
+                      }
+                      onChange={(value) => {
+                        setGnduYearInput(value);
+                        setOpenGnduDropdown(null);
+                      }}
+                    />
+                  </View>
+
+                  <View style={dropdownGridItem}>
+                    <GnduDropdown
+                      label="Month"
+                      options={GNDU_MONTH_OPTIONS}
+                      value={gnduMonthInput}
+                      open={openGnduDropdown === "month"}
+                      onToggle={() =>
+                        setOpenGnduDropdown(openGnduDropdown === "month" ? null : "month")
+                      }
+                      onChange={(value) => {
+                        setGnduMonthInput(value);
+                        setOpenGnduDropdown(null);
+                      }}
+                    />
+                  </View>
                 </View>
 
-                <GnduDropdown
-                  label="Year"
-                  options={GNDU_YEAR_OPTIONS}
-                  value={gnduYearInput}
-                  open={openGnduDropdown === "year"}
-                  onToggle={() =>
-                    setOpenGnduDropdown(openGnduDropdown === "year" ? null : "year")
-                  }
-                  onChange={(value) => {
-                    setGnduYearInput(value);
-                    setOpenGnduDropdown(null);
-                  }}
-                />
+                <View style={dropdownGrid}>
+                  <View style={dropdownGridItem}>
+                    <GnduDropdown
+                      label="Course Type"
+                      options={GNDU_COURSE_TYPE_OPTIONS}
+                      value={gnduCourseTypeInput}
+                      open={openGnduDropdown === "courseType"}
+                      onToggle={() =>
+                        setOpenGnduDropdown(
+                          openGnduDropdown === "courseType" ? null : "courseType"
+                        )
+                      }
+                      onChange={(value) => {
+                        setGnduCourseTypeInput(value);
+                        setOpenGnduDropdown(null);
+                      }}
+                    />
+                  </View>
 
-                <GnduDropdown
-                  label="Month"
-                  options={GNDU_MONTH_OPTIONS}
-                  value={gnduMonthInput}
-                  open={openGnduDropdown === "month"}
-                  onToggle={() =>
-                    setOpenGnduDropdown(openGnduDropdown === "month" ? null : "month")
-                  }
-                  onChange={(value) => {
-                    setGnduMonthInput(value);
-                    setOpenGnduDropdown(null);
-                  }}
-                />
-
-                <GnduDropdown
-                  label="Course Type"
-                  options={GNDU_COURSE_TYPE_OPTIONS}
-                  value={gnduCourseTypeInput}
-                  open={openGnduDropdown === "courseType"}
-                  onToggle={() =>
-                    setOpenGnduDropdown(
-                      openGnduDropdown === "courseType" ? null : "courseType"
-                    )
-                  }
-                  onChange={(value) => {
-                    setGnduCourseTypeInput(value);
-                    setOpenGnduDropdown(null);
-                  }}
-                />
+                  <View style={dropdownGridItem}>
+                    <GnduDropdown
+                      label="Semester"
+                      options={gnduSemesterOptions}
+                      value={gnduSemesterCodeInput}
+                      open={openGnduDropdown === "semester"}
+                      onToggle={() =>
+                        setOpenGnduDropdown(
+                          openGnduDropdown === "semester" ? null : "semester"
+                        )
+                      }
+                      onChange={(value) => {
+                        setGnduSemesterCodeInput(value);
+                        setOpenGnduDropdown(null);
+                      }}
+                    />
+                  </View>
+                </View>
 
                 <View style={[detectedCourseBox, { backgroundColor: theme.input, borderColor: theme.border }]}>
-                  <Text style={[fieldLabel, { color: theme.muted, marginTop: 0, marginBottom: 4 }]}>Detected Course</Text>
                   <Text style={[detectedCourseText, { color: theme.text }]}>
-                    Course code {inferredGnduCourseCode}
+                    Course {inferredGnduCourseCode}
                   </Text>
                 </View>
-
-                <GnduDropdown
-                  label="Semester"
-                  options={gnduSemesterOptions}
-                  value={gnduSemesterCodeInput}
-                  open={openGnduDropdown === "semester"}
-                  onToggle={() =>
-                    setOpenGnduDropdown(
-                      openGnduDropdown === "semester" ? null : "semester"
-                    )
-                  }
-                  onChange={(value) => {
-                    setGnduSemesterCodeInput(value);
-                    setOpenGnduDropdown(null);
-                  }}
-                />
 
                 <Text style={[mutedText, { color: theme.subtle, marginBottom: 12 }]}>
                   Searching {selectedGnduMonth} {gnduYearInput}, {selectedGnduCourseType}, {selectedGnduSemester}.
@@ -862,9 +870,16 @@ function GnduDropdown({
           {selected?.label || value || "Select"}
         </Text>
 
-        <Text style={[dropdownArrow, { color: open ? "#8b5cf6" : theme.muted }]}>
-          {open ? "^" : "v"}
-        </Text>
+        <View
+          style={[
+            dropdownChevron,
+            {
+              borderRightColor: open ? "#8b5cf6" : theme.muted,
+              borderBottomColor: open ? "#8b5cf6" : theme.muted,
+              transform: [{ rotate: open ? "225deg" : "45deg" }],
+            },
+          ]}
+        />
       </TouchableOpacity>
 
       {open && (
@@ -1075,85 +1090,91 @@ const input = {
   borderColor: "#334155",
 };
 
-const gnduGuideBox = {
-  padding: 14,
-  borderRadius: 18,
-  borderWidth: 1,
-  marginBottom: 14,
-};
-
-const gnduGuideTitle = {
-  fontSize: 15,
+const fieldLabel = {
+  fontSize: 12,
   fontWeight: "900" as const,
-  marginBottom: 4,
+  marginBottom: 7,
 };
 
-const gnduGuideText = {
+const gnduHelpLine = {
   fontSize: 13,
   lineHeight: 18,
-};
-
-const fieldLabel = {
-  fontSize: 13,
-  fontWeight: "900" as const,
-  marginTop: 6,
-  marginBottom: 8,
+  marginTop: -2,
+  marginBottom: 12,
 };
 
 const detectedCourseBox = {
-  padding: 12,
-  borderRadius: 18,
+  alignSelf: "flex-start" as const,
+  paddingHorizontal: 12,
+  paddingVertical: 8,
+  borderRadius: 999,
   borderWidth: 1,
   marginBottom: 12,
 };
 
 const detectedCourseText = {
-  fontSize: 16,
+  fontSize: 13,
   fontWeight: "900" as const,
 };
 
+const dropdownGrid = {
+  flexDirection: "row" as const,
+  gap: 10,
+  alignItems: "flex-start" as const,
+  zIndex: 4,
+};
+
+const dropdownGridItem = {
+  flex: 1,
+  minWidth: 0,
+};
+
 const dropdownWrap = {
-  marginBottom: 12,
+  marginBottom: 10,
 };
 
 const dropdownButton = {
-  minHeight: 54,
-  borderRadius: 18,
+  minHeight: 48,
+  borderRadius: 16,
   borderWidth: 1,
-  paddingHorizontal: 16,
+  paddingHorizontal: 13,
   flexDirection: "row" as const,
   alignItems: "center" as const,
   justifyContent: "space-between" as const,
 };
 
 const dropdownValue = {
-  fontSize: 16,
+  flex: 1,
+  fontSize: 15,
   fontWeight: "900" as const,
 };
 
-const dropdownArrow = {
-  fontSize: 18,
-  fontWeight: "900" as const,
+const dropdownChevron = {
+  width: 9,
+  height: 9,
+  borderRightWidth: 2,
+  borderBottomWidth: 2,
+  marginLeft: 10,
 };
 
 const dropdownMenu = {
   borderWidth: 1,
-  borderRadius: 18,
-  padding: 8,
-  marginTop: 8,
+  borderRadius: 16,
+  padding: 6,
+  marginTop: 7,
 };
 
 const dropdownOption = {
-  minHeight: 44,
-  borderRadius: 14,
+  minHeight: 40,
+  borderRadius: 12,
   borderWidth: 1,
-  paddingHorizontal: 12,
+  paddingHorizontal: 10,
   justifyContent: "center" as const,
-  marginBottom: 6,
+  marginBottom: 5,
 };
 
 const dropdownOptionText = {
-  fontSize: 15,
+  fontSize: 14,
   fontWeight: "900" as const,
 };
 
