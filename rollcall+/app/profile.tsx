@@ -7,7 +7,10 @@ import { useState } from "react";
 import {
   Alert,
   Image,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   Share,
@@ -498,106 +501,120 @@ export default function Profile() {
       </Modal>
 
       <Modal transparent visible={showSupportCenter} animationType="slide">
-        <Pressable
-          onPress={() => setShowSupportCenter(false)}
-          style={[modalBackdrop, { backgroundColor: theme.backdrop }]}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
         >
-          <Pressable style={[supportModal, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <View style={modalHandle} />
+          <Pressable
+            onPress={() => {
+              Keyboard.dismiss();
+              setShowSupportCenter(false);
+            }}
+            style={[modalBackdrop, { backgroundColor: theme.backdrop }]}
+          >
+            <Pressable style={[supportModal, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+              <View style={modalHandle} />
 
-            <Text style={[modalTitle, { color: theme.text }]}>Support Center</Text>
-            <Text style={[modalSubtitle, { color: theme.muted }]}>
-              Send a support ticket with safe app and portal details.
-            </Text>
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
+                showsVerticalScrollIndicator={false}
+              >
+                <Text style={[modalTitle, { color: theme.text }]}>Support Center</Text>
+                <Text style={[modalSubtitle, { color: theme.muted }]}>
+                  Send a support ticket with safe app and portal details.
+                </Text>
 
-            <Text style={[supportLabel, { color: theme.subtle }]}>Category</Text>
-            <View style={supportChipRow}>
-              {SUPPORT_CATEGORIES.map((category) => (
+                <Text style={[supportLabel, { color: theme.subtle }]}>Category</Text>
+                <View style={supportChipRow}>
+                  {SUPPORT_CATEGORIES.map((category) => (
+                    <TouchableOpacity
+                      key={category}
+                      activeOpacity={0.86}
+                      onPress={() => setSupportCategory(category)}
+                      style={[
+                        supportChip,
+                        {
+                          backgroundColor:
+                            supportCategory === category ? theme.primary : theme.input,
+                          borderColor:
+                            supportCategory === category ? "#a78bfa" : theme.border,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          supportChipText,
+                          { color: supportCategory === category ? "#ffffff" : theme.text },
+                        ]}
+                      >
+                        {category}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <Text style={[supportLabel, { color: theme.subtle }]}>Priority</Text>
+                <View style={supportChipRow}>
+                  {SUPPORT_PRIORITIES.map((priority) => (
+                    <TouchableOpacity
+                      key={priority}
+                      activeOpacity={0.86}
+                      onPress={() => setSupportPriority(priority)}
+                      style={[
+                        supportChip,
+                        {
+                          backgroundColor:
+                            supportPriority === priority ? theme.primary : theme.input,
+                          borderColor:
+                            supportPriority === priority ? "#a78bfa" : theme.border,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          supportChipText,
+                          { color: supportPriority === priority ? "#ffffff" : theme.text },
+                        ]}
+                      >
+                        {priority}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <TextInput
+                  placeholder="Contact email or phone"
+                  placeholderTextColor={theme.subtle}
+                  value={supportContact}
+                  onChangeText={setSupportContact}
+                  style={[supportInput, { backgroundColor: theme.input, color: theme.text, borderColor: theme.borderStrong }]}
+                />
+
+                <TextInput
+                  placeholder="Describe what happened"
+                  placeholderTextColor={theme.subtle}
+                  value={supportMessage}
+                  onChangeText={setSupportMessage}
+                  multiline
+                  textAlignVertical="top"
+                  style={[supportMessageInput, { backgroundColor: theme.input, color: theme.text, borderColor: theme.borderStrong }]}
+                />
+
                 <TouchableOpacity
-                  key={category}
                   activeOpacity={0.86}
-                  onPress={() => setSupportCategory(category)}
-                  style={[
-                    supportChip,
-                    {
-                      backgroundColor:
-                        supportCategory === category ? theme.primary : theme.input,
-                      borderColor:
-                        supportCategory === category ? "#a78bfa" : theme.border,
-                    },
-                  ]}
+                  disabled={submittingSupport}
+                  onPress={submitSupportTicket}
+                  style={[supportSubmit, { opacity: submittingSupport ? 0.7 : 1 }]}
                 >
-                  <Text
-                    style={[
-                      supportChipText,
-                      { color: supportCategory === category ? "#ffffff" : theme.text },
-                    ]}
-                  >
-                    {category}
+                  <Text style={supportSubmitText}>
+                    {submittingSupport ? "Preparing Ticket..." : "Create Support Ticket"}
                   </Text>
                 </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={[supportLabel, { color: theme.subtle }]}>Priority</Text>
-            <View style={supportChipRow}>
-              {SUPPORT_PRIORITIES.map((priority) => (
-                <TouchableOpacity
-                  key={priority}
-                  activeOpacity={0.86}
-                  onPress={() => setSupportPriority(priority)}
-                  style={[
-                    supportChip,
-                    {
-                      backgroundColor:
-                        supportPriority === priority ? theme.primary : theme.input,
-                      borderColor:
-                        supportPriority === priority ? "#a78bfa" : theme.border,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      supportChipText,
-                      { color: supportPriority === priority ? "#ffffff" : theme.text },
-                    ]}
-                  >
-                    {priority}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <TextInput
-              placeholder="Contact email or phone"
-              placeholderTextColor={theme.subtle}
-              value={supportContact}
-              onChangeText={setSupportContact}
-              style={[supportInput, { backgroundColor: theme.input, color: theme.text, borderColor: theme.borderStrong }]}
-            />
-
-            <TextInput
-              placeholder="Describe what happened"
-              placeholderTextColor={theme.subtle}
-              value={supportMessage}
-              onChangeText={setSupportMessage}
-              multiline
-              textAlignVertical="top"
-              style={[supportMessageInput, { backgroundColor: theme.input, color: theme.text, borderColor: theme.borderStrong }]}
-            />
-
-            <TouchableOpacity
-              activeOpacity={0.86}
-              disabled={submittingSupport}
-              onPress={submitSupportTicket}
-              style={[supportSubmit, { opacity: submittingSupport ? 0.7 : 1 }]}
-            >
-              <Text style={supportSubmitText}>
-                {submittingSupport ? "Preparing Ticket..." : "Create Support Ticket"}
-              </Text>
-            </TouchableOpacity>
+              </ScrollView>
+            </Pressable>
           </Pressable>
-        </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
 
       <BottomTabs active="profile" />
