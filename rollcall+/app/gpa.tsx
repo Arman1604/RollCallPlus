@@ -103,6 +103,30 @@ function getCompactSemesterTitle(value?: string) {
   return title || "Semester";
 }
 
+function getResultHistoryKey(result: ResultData) {
+  return [
+    result.source || "Portal",
+    getCompactSemesterTitle(result.semester),
+  ]
+    .join(":")
+    .toLowerCase();
+}
+
+function mergeResultHistory(existing: ResultData[], incoming: ResultData[]) {
+  const merged = new Map<string, ResultData>();
+
+  [...incoming, ...existing].forEach((item) => {
+    if (!item) return;
+    const key = getResultHistoryKey(item);
+
+    if (!merged.has(key)) {
+      merged.set(key, item);
+    }
+  });
+
+  return Array.from(merged.values());
+}
+
 const GNDU_YEAR_OPTIONS = ["2026", "2025", "2024", "2023"];
 
 const GNDU_MONTH_OPTIONS = [
@@ -289,9 +313,13 @@ export default function GPATracker() {
       }
 
       const fetchedResults = data.results || [data.current].filter(Boolean);
-      setGnduResults(fetchedResults);
+      const savedResults = await AsyncStorage.getItem(gnduStorageKey);
+      const existingResults = savedResults ? JSON.parse(savedResults) : gnduResults;
+      const mergedResults = mergeResultHistory(existingResults, fetchedResults);
+
+      setGnduResults(mergedResults);
       await AsyncStorage.setItem(gnduRollStorageKey, rollToFetch);
-      await AsyncStorage.setItem(gnduStorageKey, JSON.stringify(fetchedResults));
+      await AsyncStorage.setItem(gnduStorageKey, JSON.stringify(mergedResults));
     } catch (error) {
       console.log("GNDU result fetch error:", error);
       Alert.alert("GNDU Result Error", "Could not connect to GNDU result portal right now.");
