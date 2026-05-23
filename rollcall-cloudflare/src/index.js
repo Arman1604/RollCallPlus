@@ -564,10 +564,26 @@ function extractGnduResultFromPage(html, meta = {}) {
   const $ = cheerio.load(html);
   const result = extractResultFromPage($);
   const pageText = cleanValue($("body").text());
+  const statusMatch = pageText.match(/Result\s*:\s*([A-Za-z ]+)(?:\s*-\s*([0-9]+))?/i);
+  const totalMatch = pageText.match(/Total Marks\s+([0-9]+)\s+([0-9]+)/i);
 
   if (result.sgpa === "0") {
     const sgpaMatch = pageText.match(/(?:sgpa|grade point average)\s*[:\-]?\s*([0-9]+(?:\.[0-9]+)?)/i);
     if (sgpaMatch) result.sgpa = sgpaMatch[1];
+  }
+
+  if (statusMatch) {
+    result.resultStatus = cleanValue(statusMatch[1]).toUpperCase();
+  }
+
+  if (totalMatch) {
+    const obtained = Number(totalMatch[1]);
+    const total = Number(totalMatch[2]);
+
+    if (obtained > 0 && total > 0 && result.sgpa === "0") {
+      result.sgpa = ((obtained / total) * 10).toFixed(2);
+      result.creditsEarned = `${obtained}/${total}`;
+    }
   }
 
   if (result.subjects.length === 0) {
@@ -586,11 +602,31 @@ function extractGnduResultFromPage(html, meta = {}) {
           grade: cells[cells.length - 1],
         });
       }
+
+      if (/^PAPER[-\s]?[IVX]+/i.test(cells[0] || "") && cells.length >= 5) {
+        const marks = cells
+          .slice(1)
+          .filter((value) => /^[0-9]+$/.test(value))
+          .map(Number);
+        const obtained = marks[0] || 0;
+        const maximum = marks[marks.length - 1] || 100;
+
+        result.subjects.push({
+          code: cells[0].split(":")[0],
+          name: cleanValue(cells[0].replace(/^PAPER[-\s]?[IVX]+\s*:\s*/i, "")),
+          credits: String(maximum),
+          grade: String(obtained),
+        });
+      }
     });
   }
 
   return {
-    available: result.sgpa !== "0" || result.subjects.length > 0,
+    available:
+      result.sgpa !== "0" ||
+      result.subjects.length > 0 ||
+      !!totalMatch ||
+      !!statusMatch,
     semester: meta.semester || "GNDU Semester",
     source: "GNDU",
     ...result,

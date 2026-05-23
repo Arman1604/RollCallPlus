@@ -30,6 +30,7 @@ type ResultData = {
   available?: boolean;
   semester?: string;
   selected?: boolean;
+  source?: string;
   sgpa?: string;
   creditsEarned?: string;
   resultStatus?: string;
@@ -156,6 +157,7 @@ export default function GPATracker() {
     result;
 
   const activeResult = currentPortalResult;
+  const isGnduResult = activeResult?.source === "GNDU";
   const otherPortalResults = allPortalResults.filter(
     (item) =>
       (item.semester || "") !== (activeResult?.semester || "") ||
@@ -498,7 +500,7 @@ export default function GPATracker() {
             <>
               <View style={{ flexDirection: "row", gap: 14, marginTop: 18 }}>
                 <InfoCard
-                  title="Credits"
+                  title={isGnduResult ? "Marks" : "Credits"}
                   value={activeResult?.creditsEarned || "0"}
                   color="#38bdf8"
                 />
@@ -564,7 +566,9 @@ export default function GPATracker() {
                         <Text style={[subjectName, { color: theme.text }]}>{subject.name}</Text>
 
                         <Text style={[mutedText, { color: theme.subtle }]}>
-                          {subject.code} • Credits: {subject.credits}
+                          {isGnduResult
+                            ? `${subject.code} • Marks: ${subject.grade}/${subject.credits}`
+                            : `${subject.code} • Credits: ${subject.credits}`}
                         </Text>
                       </View>
 
