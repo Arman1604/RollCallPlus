@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Stack } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   Alert,
@@ -60,15 +60,31 @@ function getPerformanceText(score: number, hasPortalResult: boolean, hasRealSgpa
 }
 
 function isLawStudent(student: any) {
-  const course = String(student?.course || "").toLowerCase();
+  const course = [
+    student?.course,
+    student?.department,
+    student?.section,
+    student?.batch,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ");
 
   return (
     course.includes("law") ||
     course.includes("llb") ||
+    course.includes("b a ll b") ||
     course.includes("ba llb") ||
-    course.includes("b.a.ll.b") ||
-    course.includes("b.a. ll.b")
+    course.includes("bba llb") ||
+    course.includes("b com llb") ||
+    course.includes("bachelor of laws")
   );
+}
+
+function getManualStorageKey(student: any) {
+  const rollNumber = String(student?.rollNumber || "").trim();
+  return rollNumber ? `manualSGPA:${rollNumber}` : "manualSGPA";
 }
 
 export default function GPATracker() {
@@ -95,6 +111,7 @@ export default function GPATracker() {
   };
 
   const lawStudent = isLawStudent(student);
+  const manualStorageKey = getManualStorageKey(student);
 
   const [semester, setSemester] = useState("");
   const [sgpaInput, setSgpaInput] = useState("");
@@ -103,10 +120,6 @@ export default function GPATracker() {
   const [expandedArchiveSemester, setExpandedArchiveSemester] = useState<string | null>(
     null
   );
-
-  useEffect(() => {
-    loadManualData();
-  }, []);
 
   const currentPortalResult =
     resultFromStore ||
@@ -133,23 +146,38 @@ export default function GPATracker() {
 
   const sgpaFromPortal = hasRealSgpa ? Number(activeResult.sgpa) : 0;
 
-  const portalAvailable = !lawStudent && (activeResult.available === true || hasSubjects);
+  const portalAvailable = activeResult.available === true || hasSubjects;
 
-  async function loadManualData() {
+  const loadManualData = useCallback(async () => {
     try {
-      const saved = await AsyncStorage.getItem("manualSGPA");
+      const saved = await AsyncStorage.getItem(manualStorageKey);
 
       if (saved) {
         setManualData(JSON.parse(saved));
+        return;
       }
+
+      const legacySaved = await AsyncStorage.getItem("manualSGPA");
+
+      if (legacySaved && manualStorageKey !== "manualSGPA") {
+        setManualData(JSON.parse(legacySaved));
+        await AsyncStorage.setItem(manualStorageKey, legacySaved);
+        return;
+      }
+
+      setManualData([]);
     } catch (error) {
       console.log("Manual SGPA load error:", error);
     }
-  }
+  }, [manualStorageKey]);
+
+  useEffect(() => {
+    loadManualData();
+  }, [loadManualData]);
 
   async function saveManualData(data: ManualSGPA[]) {
     setManualData(data);
-    await AsyncStorage.setItem("manualSGPA", JSON.stringify(data));
+    await AsyncStorage.setItem(manualStorageKey, JSON.stringify(data));
   }
 
   async function addSGPA() {
@@ -197,16 +225,6 @@ export default function GPATracker() {
       !isNaN(Number(item.sgpa))
   );
 
-  const manualCGPA =
-    validManualData.length === 0
-      ? 0
-      : Number(
-          (
-            validManualData.reduce((sum, item) => sum + Number(item.sgpa), 0) /
-            validManualData.length
-          ).toFixed(2)
-        );
-
   const combinedSemesters = [
     ...validPortalResults.map((item) => ({
       semester: item.semester || "Portal Semester",
@@ -237,15 +255,22 @@ export default function GPATracker() {
             cgpaSemesters.length
           ).toFixed(2)
         );
+  const latestManualSemester = validManualData[validManualData.length - 1];
+  const latestManualSGPA = latestManualSemester
+    ? Number(latestManualSemester.sgpa)
+    : 0;
 
   const displayScore =
     portalAvailable && hasRealSgpa
       ? sgpaFromPortal
       : lawStudent
-      ? manualCGPA
+      ? latestManualSGPA
       : 0;
 
-  const mainScoreText = portalAvailable && !hasRealSgpa ? "N/A" : displayScore || "0";
+  const portalMissingSgpa =
+    portalAvailable && !hasRealSgpa && !(lawStudent && latestManualSGPA > 0);
+
+  const mainScoreText = portalMissingSgpa ? "N/A" : displayScore || "0";
 
   return (
     <>
@@ -259,7 +284,7 @@ export default function GPATracker() {
 
           <Text style={[subtitle, { color: theme.muted }]}>
             {lawStudent
-              ? "GNDU/Law manual academic tracker"
+              ? "Law GPA from portal or saved SGPA"
               : "Real academic data from college portal"}
           </Text>
 
@@ -270,7 +295,9 @@ export default function GPATracker() {
                   ? `${activeResult?.semester || "Current"} SGPA`
                   : "Portal Result"
                 : lawStudent
-                ? "Manual CGPA"
+                ? latestManualSemester
+                  ? `${latestManualSemester.semester} SGPA`
+                  : "Law GPA"
                 : "Portal Result"}
             </Text>
 
@@ -281,7 +308,7 @@ export default function GPATracker() {
                     ? "#22c55e"
                     : hasRealSgpa && displayScore >= 7
                     ? "#38bdf8"
-                    : portalAvailable && !hasRealSgpa
+                    : portalMissingSgpa
                     ? "#f59e0b"
                     : displayScore > 0
                     ? "#f97316"
@@ -295,7 +322,11 @@ export default function GPATracker() {
             </Text>
 
             <Text style={[performanceText, { color: theme.mode === "dark" ? "#cbd5e1" : theme.muted }]}>
-              {getPerformanceText(displayScore, portalAvailable, hasRealSgpa)}
+              {getPerformanceText(
+                displayScore,
+                portalAvailable && !lawStudent,
+                hasRealSgpa || (lawStudent && latestManualSGPA > 0)
+              )}
             </Text>
 
             {totalCGPA > 0 && (
@@ -310,7 +341,9 @@ export default function GPATracker() {
 
                 <Text style={{ color: theme.subtle, marginTop: 6 }}>
                   {lawStudent
-                    ? "Calculated from portal + saved semester SGPAs"
+                    ? `Calculated from ${cgpaSemesters.length} portal/saved semester${
+                        cgpaSemesters.length === 1 ? "" : "s"
+                      }`
                     : `Calculated from ${cgpaSemesters.length} portal semester${
                         cgpaSemesters.length === 1 ? "" : "s"
                       }`}
@@ -318,7 +351,7 @@ export default function GPATracker() {
               </View>
             )}
 
-            {portalAvailable && !hasRealSgpa && (
+            {portalMissingSgpa && (
               <Text style={helperText}>
                 Result subjects are available, but SGPA is not declared by the portal.
               </Text>
@@ -327,7 +360,7 @@ export default function GPATracker() {
             {!portalAvailable && (
               <Text style={helperTextMuted}>
                 {lawStudent
-                  ? "Law department results may be managed through GNDU. Add your SGPA manually to track academic performance."
+                  ? "Law portal result is not available here yet. Add your semester SGPA below and RollCall+ will calculate your GPA."
                   : "Your department result should come from AGC portal, but RollCall+ could not read it yet."}
               </Text>
             )}
@@ -446,9 +479,13 @@ export default function GPATracker() {
 
           {lawStudent && (
             <>
-              <Text style={[sectionTitle, { color: theme.text }]}>Add Semester SGPA</Text>
+              <Text style={[sectionTitle, { color: theme.text }]}>Law Semester SGPA</Text>
 
               <View style={[formCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <Text style={[emptyText, { color: theme.muted, textAlign: "left", marginBottom: 12 }]}>
+                  Add the semester SGPA from your Law/GNDU result. The latest saved semester appears in the main card and all saved semesters build your CGPA.
+                </Text>
+
                 <TextInput
                   placeholder="Semester e.g. Sem 2"
                   placeholderTextColor={theme.subtle}
