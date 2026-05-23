@@ -1,6 +1,6 @@
 name = "rollcallplus-api"
 main = "src/index.js"
-compatibility_date = "2026-05-23"
+compatibility_date = "2025-05-23"
 
 [vars]
 RAILWAY_BACKEND_URL = "https://rollcallplus-production.up.railway.app"
