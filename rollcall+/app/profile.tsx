@@ -298,7 +298,13 @@ export default function Profile() {
               />
             </View>
           </TouchableOpacity>
-          <InfoCard label="Portal Sync" value="Enabled" />
+          <TouchableOpacity
+            activeOpacity={1}
+            delayLongPress={900}
+            onLongPress={() => router.push("/backend-status")}
+          >
+            <InfoCard label="Portal Sync" value="Enabled" />
+          </TouchableOpacity>
           <InfoCard label="Login" value="Saved securely on device" />
 
           <View style={actionPanel}>
@@ -310,16 +316,6 @@ export default function Profile() {
               backgroundColor="#7c3aed22"
               borderColor="#7c3aed66"
               onPress={switchAccount}
-            />
-
-            <ActionButton
-              icon="cloud-done-outline"
-              title="Backend Status"
-              subtitle="Check Cloudflare native scraper health"
-              color="#38bdf8"
-              backgroundColor="#0ea5e922"
-              borderColor="#0ea5e966"
-              onPress={() => router.push("/backend-status")}
             />
 
             <ActionButton
