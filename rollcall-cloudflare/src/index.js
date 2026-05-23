@@ -2012,8 +2012,8 @@ function supportAdminPage() {
             '<option value="closed"' + (ticket.status === "closed" ? " selected" : "") + '>Closed</option>' +
           '</select>' +
           '<div class="replyActions" style="margin-top:10px">' +
-            '<button onclick="sendReply(\\'' + escapeHtml(ticket.id) + '\\')">Send reply</button>' +
-            '<button class="secondary" onclick="copyId(\\'' + escapeHtml(ticket.id) + '\\')">Copy ID</button>' +
+            '<button data-action="reply" data-ticket-id="' + escapeHtml(ticket.id) + '">Send reply</button>' +
+            '<button class="secondary" data-action="copy" data-ticket-id="' + escapeHtml(ticket.id) + '">Copy ID</button>' +
           '</div>' +
         '</div>' +
       '</article>';
@@ -2040,12 +2040,27 @@ function supportAdminPage() {
       alert("Ticket ID copied.");
     }
 
-    document.getElementById("load").onclick = loadTickets;
-    document.getElementById("refresh").onclick = loadTickets;
-    document.getElementById("clearToken").onclick = () => {
+    document.getElementById("load").addEventListener("click", loadTickets);
+    document.getElementById("refresh").addEventListener("click", loadTickets);
+    document.getElementById("clearToken").addEventListener("click", () => {
       localStorage.removeItem("rollcall_support_token");
       tokenInput.value = "";
-    };
+      ticketsEl.innerHTML = '<div class="panel empty">Paste your admin token and load tickets.</div>';
+      countEl.textContent = "Not loaded";
+    });
+
+    ticketsEl.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-action]");
+      if (!button) return;
+
+      const ticketId = button.dataset.ticketId;
+      if (button.dataset.action === "reply") {
+        sendReply(ticketId);
+      }
+      if (button.dataset.action === "copy") {
+        copyId(ticketId);
+      }
+    });
   </script>
 </body>
 </html>`;
