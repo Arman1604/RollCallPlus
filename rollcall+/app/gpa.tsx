@@ -136,7 +136,7 @@ export default function GPATracker() {
   const [gnduRollInput, setGnduRollInput] = useState(gnduRollNumber);
   const [gnduYearInput, setGnduYearInput] = useState("2025");
   const [gnduMonthInput, setGnduMonthInput] = useState("12");
-  const [gnduCourseTypeInput, setGnduCourseTypeInput] = useState("T");
+  const [gnduCourseTypeInput, setGnduCourseTypeInput] = useState("P");
   const [manualData, setManualData] = useState<ManualSGPA[]>([]);
   const [gnduResults, setGnduResults] = useState<ResultData[]>([]);
   const [gnduLoading, setGnduLoading] = useState(false);
@@ -631,7 +631,7 @@ export default function GPATracker() {
                 </View>
 
                 <Text style={[mutedText, { color: theme.subtle, marginBottom: 12 }]}>
-                  Month: 5 May, 12 December. Type: C- college course, T pass course.
+                  Month: 5 May, 12 December. Type: P pass course, C- college course.
                 </Text>
 
                 <TouchableOpacity

@@ -600,7 +600,7 @@ async function scrapeGnduResult(payload) {
     ? [payload.year]
     : [new Date().getFullYear().toString()];
   const months = payload.month ? [payload.month] : ["5"];
-  const courseTypes = payload.courseType ? [payload.courseType] : ["C-"];
+  const courseTypes = payload.courseType ? [payload.courseType] : ["P"];
   const collected = [];
   const diagnostics = {
     sessionsChecked: 0,
