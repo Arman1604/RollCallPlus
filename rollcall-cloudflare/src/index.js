@@ -2,7 +2,13 @@ import * as cheerio from "cheerio";
 
 const BASE_URL = "https://agclms.in";
 const CACHE_TTL = 3 * 60 * 1000;
+const MAX_LOGIN_BODY_BYTES = 4096;
+const LOGIN_IP_LIMIT = 30;
+const LOGIN_IP_WINDOW_MS = 10 * 60 * 1000;
+const LOGIN_ACCOUNT_LIMIT = 8;
+const LOGIN_ACCOUNT_WINDOW_MS = 5 * 60 * 1000;
 const loginCache = new Map();
+const rateBuckets = new Map();
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -10,15 +16,114 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type,Authorization",
 };
 
-function json(data, status = 200) {
+function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
       ...CORS_HEADERS,
       "Content-Type": "application/json",
       "Cache-Control": "no-store",
+      ...headers,
     },
   });
+}
+
+function getClientIp(request) {
+  return (
+    request.headers.get("CF-Connecting-IP") ||
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    "unknown"
+  );
+}
+
+function pruneRateBuckets(now = Date.now()) {
+  for (const [key, bucket] of rateBuckets.entries()) {
+    if (bucket.resetAt <= now) {
+      rateBuckets.delete(key);
+    }
+  }
+}
+
+function checkRateLimit(key, limit, windowMs) {
+  const now = Date.now();
+  pruneRateBuckets(now);
+
+  const bucket = rateBuckets.get(key);
+  if (!bucket || bucket.resetAt <= now) {
+    rateBuckets.set(key, {
+      count: 1,
+      resetAt: now + windowMs,
+    });
+    return null;
+  }
+
+  bucket.count += 1;
+
+  if (bucket.count > limit) {
+    return Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
+  }
+
+  return null;
+}
+
+async function readJsonBody(request, maxBytes = MAX_LOGIN_BODY_BYTES) {
+  const contentLength = Number(request.headers.get("content-length") || 0);
+
+  if (contentLength > maxBytes) {
+    return {
+      response: json({ message: "Request body is too large" }, 413),
+    };
+  }
+
+  const bodyText = await request.text();
+
+  if (new TextEncoder().encode(bodyText).length > maxBytes) {
+    return {
+      response: json({ message: "Request body is too large" }, 413),
+    };
+  }
+
+  try {
+    const body = bodyText ? JSON.parse(bodyText) : {};
+
+    if (!body || Array.isArray(body) || typeof body !== "object") {
+      return {
+        response: json({ message: "Request body must be a JSON object" }, 400),
+      };
+    }
+
+    return { body, bodyText };
+  } catch (error) {
+    return {
+      response: json({ message: "Invalid JSON body" }, 400),
+    };
+  }
+}
+
+function validateLoginPayload(body) {
+  const rollNumber = String(body.rollNumber || "").trim();
+  const password = String(body.password || "");
+
+  if (!rollNumber || !password) {
+    return { response: json({ message: "Roll number and password required" }, 400) };
+  }
+
+  if (!/^[A-Za-z0-9/_-]{3,40}$/.test(rollNumber)) {
+    return { response: json({ message: "Invalid roll number format" }, 400) };
+  }
+
+  if (password.length < 1 || password.length > 80) {
+    return { response: json({ message: "Invalid password length" }, 400) };
+  }
+
+  return {
+    payload: {
+      ...body,
+      rollNumber,
+      password,
+      forceRefresh: body.forceRefresh === true,
+    },
+  };
 }
 
 function normalizeBaseUrl(value) {
@@ -698,8 +803,52 @@ async function proxyToRailway(request, env, pathname) {
 }
 
 async function handleLogin(request, env) {
-  const bodyText = await request.text();
-  const body = bodyText ? JSON.parse(bodyText) : {};
+  const bodyResult = await readJsonBody(request);
+  if (bodyResult.response) {
+    return bodyResult.response;
+  }
+
+  const { body, bodyText } = bodyResult;
+  const validation = validateLoginPayload(body);
+  if (validation.response) {
+    return validation.response;
+  }
+
+  const payload = validation.payload;
+  const retryAfterForIp = checkRateLimit(
+    `ip:${getClientIp(request)}`,
+    LOGIN_IP_LIMIT,
+    LOGIN_IP_WINDOW_MS
+  );
+
+  if (retryAfterForIp) {
+    return json(
+      {
+        message: "Too many login attempts. Please try again shortly.",
+        retryAfterSeconds: retryAfterForIp,
+      },
+      429,
+      { "Retry-After": String(retryAfterForIp) }
+    );
+  }
+
+  const retryAfterForAccount = checkRateLimit(
+    `account:${payload.rollNumber.toLowerCase()}`,
+    LOGIN_ACCOUNT_LIMIT,
+    LOGIN_ACCOUNT_WINDOW_MS
+  );
+
+  if (retryAfterForAccount) {
+    return json(
+      {
+        message: "Too many attempts for this account. Please wait a few minutes.",
+        retryAfterSeconds: retryAfterForAccount,
+      },
+      429,
+      { "Retry-After": String(retryAfterForAccount) }
+    );
+  }
+
   const useNativeScraper = env.USE_NATIVE_SCRAPER === "true";
 
   if (!useNativeScraper) {
@@ -715,7 +864,7 @@ async function handleLogin(request, env) {
   }
 
   try {
-    return await scrapeLogin(body);
+    return await scrapeLogin(payload);
   } catch (error) {
     console.log("Native scraper failed:", error.message);
 
@@ -756,6 +905,7 @@ export default {
       return json({
         status: "success",
         service: "RollCall+ Cloudflare API",
+        version: "cloudflare-native-v1",
         nativeScraperEnabled: env.USE_NATIVE_SCRAPER === "true",
         railwayFallbackEnabled: env.NATIVE_FALLBACK_TO_RAILWAY !== "false",
         upstreamConfigured:
