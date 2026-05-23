@@ -319,7 +319,7 @@ export default function GPATracker() {
       if (!response.ok || !data.available) {
         Alert.alert(
           "GNDU Result Not Found",
-          `${data.message || "Result is not available yet."}${
+          `${data.message || "Result is not available for this selection yet."}\n\nTry another month/session or semester if your result is already published on GNDU.${
             data.error ? `\n\nError: ${data.error}` : ""
           }${
             data.diagnostics
