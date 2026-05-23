@@ -237,6 +237,12 @@ function makeFullUrl(src) {
   return `${BASE_URL}/${src}`;
 }
 
+function makeGnduFullUrl(src) {
+  if (!src) return GNDU_RESULT_URL;
+  if (src.startsWith("http")) return src;
+  return new URL(src, GNDU_RESULT_URL).toString();
+}
+
 function cleanValue(value) {
   if (!value) return "Not Available";
   const cleaned = String(value).replace(/\s+/g, " ").replace(/^:/, "").trim();
@@ -519,6 +525,7 @@ class GnduClient {
   async request(url, options = {}) {
     const response = await fetch(url, {
       ...options,
+      redirect: "manual",
       headers: {
         "User-Agent": "RollCallPlus-Cloudflare-GNDU",
         ...(this.cookieHeader() ? { Cookie: this.cookieHeader() } : {}),
@@ -527,6 +534,16 @@ class GnduClient {
     });
 
     this.storeCookies(response.headers);
+
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get("location");
+      if (location) {
+        return this.request(makeGnduFullUrl(location), {
+          method: "GET",
+        });
+      }
+    }
+
     return response;
   }
 
