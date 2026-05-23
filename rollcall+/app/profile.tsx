@@ -313,6 +313,16 @@ export default function Profile() {
             />
 
             <ActionButton
+              icon="cloud-done-outline"
+              title="Backend Status"
+              subtitle="Check Cloudflare native scraper health"
+              color="#38bdf8"
+              backgroundColor="#0ea5e922"
+              borderColor="#0ea5e966"
+              onPress={() => router.push("/backend-status")}
+            />
+
+            <ActionButton
               icon="log-out-outline"
               title="Logout"
               subtitle="Remove this session from the device"
