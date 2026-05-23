@@ -103,6 +103,31 @@ function getCompactSemesterTitle(value?: string) {
   return title || "Semester";
 }
 
+const GNDU_YEAR_OPTIONS = ["2026", "2025", "2024", "2023"];
+
+const GNDU_MONTH_OPTIONS = [
+  { label: "May", value: "5", help: "May session" },
+  { label: "December", value: "12", help: "December session" },
+];
+
+const GNDU_COURSE_TYPE_OPTIONS = [
+  { label: "Pass Course", value: "P", help: "Most Law results" },
+  { label: "College Course", value: "C-", help: "Use if GNDU lists your result under college course" },
+];
+
+const GNDU_SEMESTERS = [
+  { label: "Sem I", suffix: "01" },
+  { label: "Sem II", suffix: "02" },
+  { label: "Sem III", suffix: "03" },
+  { label: "Sem IV", suffix: "04" },
+  { label: "Sem V", suffix: "05" },
+  { label: "Sem VI", suffix: "06" },
+  { label: "Sem VII", suffix: "07" },
+  { label: "Sem VIII", suffix: "08" },
+  { label: "Sem IX", suffix: "09" },
+  { label: "Sem X", suffix: "10" },
+];
+
 export default function GPATracker() {
   const theme = useAppTheme();
   const resultFromStore = useAppStore((state) => state.result) as ResultData | null;
@@ -154,6 +179,24 @@ export default function GPATracker() {
 
   const activeResult = currentPortalResult;
   const isGnduResult = activeResult?.source === "GNDU";
+  const inferredGnduCourseCode = gnduRollInput.trim().slice(0, 4) || "1124";
+  const gnduSemesterOptions = useMemo(
+    () =>
+      GNDU_SEMESTERS.map((item) => ({
+        ...item,
+        value: `${inferredGnduCourseCode}${item.suffix}`,
+      })),
+    [inferredGnduCourseCode]
+  );
+  const selectedGnduMonth =
+    GNDU_MONTH_OPTIONS.find((item) => item.value === gnduMonthInput)?.label ||
+    gnduMonthInput;
+  const selectedGnduCourseType =
+    GNDU_COURSE_TYPE_OPTIONS.find((item) => item.value === gnduCourseTypeInput)
+      ?.label || gnduCourseTypeInput;
+  const selectedGnduSemester =
+    gnduSemesterOptions.find((item) => item.value === gnduSemesterCodeInput)
+      ?.label || gnduSemesterCodeInput;
   const otherPortalResults = allPortalResults.filter(
     (item) =>
       (item.semester || "") !== (activeResult?.semester || "") ||
@@ -221,7 +264,7 @@ export default function GPATracker() {
           year: gnduYearInput.trim(),
           month: gnduMonthInput.trim(),
           courseType: gnduCourseTypeInput.trim(),
-          courseCode: rollToFetch.slice(0, 4),
+          courseCode: inferredGnduCourseCode,
           semesterCode: gnduSemesterCodeInput.trim(),
         }),
       });
@@ -511,47 +554,133 @@ export default function GPATracker() {
                   style={[input, { backgroundColor: theme.input, color: theme.text, borderColor: theme.borderStrong }]}
                 />
 
-                <View style={{ flexDirection: "row", gap: 10 }}>
-                  <TextInput
-                    placeholder="Year"
-                    placeholderTextColor={theme.subtle}
-                    value={gnduYearInput}
-                    onChangeText={setGnduYearInput}
-                    keyboardType="number-pad"
-                    style={[input, { flex: 1, backgroundColor: theme.input, color: theme.text, borderColor: theme.borderStrong }]}
-                  />
+                <View style={[gnduGuideBox, { backgroundColor: theme.surfaceAlt, borderColor: theme.border }]}>
+                  <Text style={[gnduGuideTitle, { color: theme.text }]}>How to choose</Text>
+                  <Text style={[gnduGuideText, { color: theme.muted }]}>
+                    Year is the result year. Month is the exam session. No date is needed. Course type is usually Pass Course for Law. Course is detected from the first four digits of your roll number.
+                  </Text>
+                </View>
 
-                  <TextInput
-                    placeholder="Month"
-                    placeholderTextColor={theme.subtle}
-                    value={gnduMonthInput}
-                    onChangeText={setGnduMonthInput}
-                    keyboardType="number-pad"
-                    style={[input, { flex: 1, backgroundColor: theme.input, color: theme.text, borderColor: theme.borderStrong }]}
-                  />
+                <Text style={[fieldLabel, { color: theme.muted }]}>Year</Text>
+                <View style={optionRow}>
+                  {GNDU_YEAR_OPTIONS.map((year) => (
+                    <TouchableOpacity
+                      key={year}
+                      activeOpacity={0.86}
+                      onPress={() => setGnduYearInput(year)}
+                      style={[
+                        optionChip,
+                        {
+                          backgroundColor:
+                            gnduYearInput === year ? "#7c3aed" : theme.input,
+                          borderColor:
+                            gnduYearInput === year ? "#a78bfa" : theme.border,
+                        },
+                      ]}
+                    >
+                      <Text style={[optionChipText, { color: gnduYearInput === year ? "white" : theme.text }]}>
+                        {year}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
 
-                  <TextInput
-                    placeholder="Type"
-                    placeholderTextColor={theme.subtle}
-                    value={gnduCourseTypeInput}
-                    onChangeText={setGnduCourseTypeInput}
-                    autoCapitalize="characters"
-                    style={[input, { flex: 1, backgroundColor: theme.input, color: theme.text, borderColor: theme.borderStrong }]}
-                  />
+                <Text style={[fieldLabel, { color: theme.muted }]}>Month</Text>
+                <View style={optionRow}>
+                  {GNDU_MONTH_OPTIONS.map((month) => (
+                    <TouchableOpacity
+                      key={month.value}
+                      activeOpacity={0.86}
+                      onPress={() => setGnduMonthInput(month.value)}
+                      style={[
+                        optionChip,
+                        {
+                          backgroundColor:
+                            gnduMonthInput === month.value ? "#7c3aed" : theme.input,
+                          borderColor:
+                            gnduMonthInput === month.value ? "#a78bfa" : theme.border,
+                        },
+                      ]}
+                    >
+                      <Text style={[optionChipText, { color: gnduMonthInput === month.value ? "white" : theme.text }]}>
+                        {month.label}
+                      </Text>
+                      <Text style={[optionChipHelp, { color: gnduMonthInput === month.value ? "#ddd6fe" : theme.subtle }]}>
+                        {month.help}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <Text style={[fieldLabel, { color: theme.muted }]}>Course Type</Text>
+                <View style={optionRow}>
+                  {GNDU_COURSE_TYPE_OPTIONS.map((courseType) => (
+                    <TouchableOpacity
+                      key={courseType.value}
+                      activeOpacity={0.86}
+                      onPress={() => setGnduCourseTypeInput(courseType.value)}
+                      style={[
+                        optionChip,
+                        {
+                          backgroundColor:
+                            gnduCourseTypeInput === courseType.value
+                              ? "#7c3aed"
+                              : theme.input,
+                          borderColor:
+                            gnduCourseTypeInput === courseType.value
+                              ? "#a78bfa"
+                              : theme.border,
+                        },
+                      ]}
+                    >
+                      <Text style={[optionChipText, { color: gnduCourseTypeInput === courseType.value ? "white" : theme.text }]}>
+                        {courseType.label}
+                      </Text>
+                      <Text style={[optionChipHelp, { color: gnduCourseTypeInput === courseType.value ? "#ddd6fe" : theme.subtle }]}>
+                        {courseType.help}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <View style={[detectedCourseBox, { backgroundColor: theme.input, borderColor: theme.border }]}>
+                  <Text style={[fieldLabel, { color: theme.muted, marginBottom: 4 }]}>Detected Course</Text>
+                  <Text style={[detectedCourseText, { color: theme.text }]}>
+                    Course code {inferredGnduCourseCode}
+                  </Text>
+                </View>
+
+                <Text style={[fieldLabel, { color: theme.muted }]}>Semester</Text>
+                <View style={optionRow}>
+                  {gnduSemesterOptions.map((semesterOption) => (
+                    <TouchableOpacity
+                      key={semesterOption.value}
+                      activeOpacity={0.86}
+                      onPress={() => setGnduSemesterCodeInput(semesterOption.value)}
+                      style={[
+                        semesterChip,
+                        {
+                          backgroundColor:
+                            gnduSemesterCodeInput === semesterOption.value
+                              ? "#7c3aed"
+                              : theme.input,
+                          borderColor:
+                            gnduSemesterCodeInput === semesterOption.value
+                              ? "#a78bfa"
+                              : theme.border,
+                        },
+                      ]}
+                    >
+                      <Text style={[optionChipText, { color: gnduSemesterCodeInput === semesterOption.value ? "white" : theme.text }]}>
+                        {semesterOption.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
                 </View>
 
                 <Text style={[mutedText, { color: theme.subtle, marginBottom: 12 }]}>
-                  Month: 5 May, 12 December. Type: P pass course, C- college course.
+                  Searching {selectedGnduMonth} {gnduYearInput}, {selectedGnduCourseType}, {selectedGnduSemester}.
                 </Text>
-
-                <TextInput
-                  placeholder="Semester code e.g. 112403"
-                  placeholderTextColor={theme.subtle}
-                  value={gnduSemesterCodeInput}
-                  onChangeText={setGnduSemesterCodeInput}
-                  keyboardType="number-pad"
-                  style={[input, { backgroundColor: theme.input, color: theme.text, borderColor: theme.borderStrong }]}
-                />
 
                 <TouchableOpacity
                   onPress={fetchGnduResult}
@@ -853,6 +982,80 @@ const input = {
   fontSize: 16,
   borderWidth: 1,
   borderColor: "#334155",
+};
+
+const gnduGuideBox = {
+  padding: 16,
+  borderRadius: 18,
+  borderWidth: 1,
+  marginBottom: 16,
+};
+
+const gnduGuideTitle = {
+  fontSize: 16,
+  fontWeight: "900" as const,
+  marginBottom: 6,
+};
+
+const gnduGuideText = {
+  fontSize: 14,
+  lineHeight: 20,
+};
+
+const fieldLabel = {
+  fontSize: 13,
+  fontWeight: "900" as const,
+  marginTop: 6,
+  marginBottom: 8,
+};
+
+const optionRow = {
+  flexDirection: "row" as const,
+  flexWrap: "wrap" as const,
+  gap: 10,
+  marginBottom: 14,
+};
+
+const optionChip = {
+  minWidth: 118,
+  flexGrow: 1,
+  paddingHorizontal: 14,
+  paddingVertical: 12,
+  borderRadius: 18,
+  borderWidth: 1,
+};
+
+const semesterChip = {
+  width: "30.6%" as const,
+  minWidth: 84,
+  alignItems: "center" as const,
+  paddingHorizontal: 10,
+  paddingVertical: 12,
+  borderRadius: 18,
+  borderWidth: 1,
+};
+
+const optionChipText = {
+  fontSize: 14,
+  fontWeight: "900" as const,
+};
+
+const optionChipHelp = {
+  fontSize: 11,
+  fontWeight: "700" as const,
+  marginTop: 3,
+};
+
+const detectedCourseBox = {
+  padding: 14,
+  borderRadius: 18,
+  borderWidth: 1,
+  marginBottom: 14,
+};
+
+const detectedCourseText = {
+  fontSize: 16,
+  fontWeight: "900" as const,
 };
 
 const button = {
