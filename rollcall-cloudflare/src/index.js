@@ -16,16 +16,45 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type,Authorization",
 };
 
-function json(data, status = 200, headers = {}) {
-  return new Response(JSON.stringify(data), {
+function json(data, status = 200, headers = {}, requestId = "") {
+  const payload =
+    requestId && data && typeof data === "object" && !Array.isArray(data)
+      ? { ...data, requestId }
+      : data;
+
+  return new Response(JSON.stringify(payload), {
     status,
     headers: {
       ...CORS_HEADERS,
       "Content-Type": "application/json",
       "Cache-Control": "no-store",
+      ...(requestId ? { "X-Request-Id": requestId } : {}),
       ...headers,
     },
   });
+}
+
+function createRequestId() {
+  const random =
+    typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID().slice(0, 8)
+      : Math.random().toString(36).slice(2, 10);
+
+  return `rc-${Date.now().toString(36)}-${random}`;
+}
+
+function logEvent(level, event, details = {}) {
+  const safeDetails = {
+    ...details,
+    password: undefined,
+  };
+
+  console[level](
+    JSON.stringify({
+      event,
+      ...safeDetails,
+    })
+  );
 }
 
 function getClientIp(request) {
@@ -66,12 +95,16 @@ function checkRateLimit(key, limit, windowMs) {
   return null;
 }
 
-async function readJsonBody(request, maxBytes = MAX_LOGIN_BODY_BYTES) {
+async function readJsonBody(
+  request,
+  requestId,
+  maxBytes = MAX_LOGIN_BODY_BYTES
+) {
   const contentLength = Number(request.headers.get("content-length") || 0);
 
   if (contentLength > maxBytes) {
     return {
-      response: json({ message: "Request body is too large" }, 413),
+      response: json({ message: "Request body is too large" }, 413, {}, requestId),
     };
   }
 
@@ -79,7 +112,7 @@ async function readJsonBody(request, maxBytes = MAX_LOGIN_BODY_BYTES) {
 
   if (new TextEncoder().encode(bodyText).length > maxBytes) {
     return {
-      response: json({ message: "Request body is too large" }, 413),
+      response: json({ message: "Request body is too large" }, 413, {}, requestId),
     };
   }
 
@@ -88,32 +121,48 @@ async function readJsonBody(request, maxBytes = MAX_LOGIN_BODY_BYTES) {
 
     if (!body || Array.isArray(body) || typeof body !== "object") {
       return {
-        response: json({ message: "Request body must be a JSON object" }, 400),
+        response: json(
+          { message: "Request body must be a JSON object" },
+          400,
+          {},
+          requestId
+        ),
       };
     }
 
     return { body, bodyText };
   } catch (error) {
     return {
-      response: json({ message: "Invalid JSON body" }, 400),
+      response: json({ message: "Invalid JSON body" }, 400, {}, requestId),
     };
   }
 }
 
-function validateLoginPayload(body) {
+function validateLoginPayload(body, requestId) {
   const rollNumber = String(body.rollNumber || "").trim();
   const password = String(body.password || "");
 
   if (!rollNumber || !password) {
-    return { response: json({ message: "Roll number and password required" }, 400) };
+    return {
+      response: json(
+        { message: "Roll number and password required" },
+        400,
+        {},
+        requestId
+      ),
+    };
   }
 
   if (!/^[A-Za-z0-9/_-]{3,40}$/.test(rollNumber)) {
-    return { response: json({ message: "Invalid roll number format" }, 400) };
+    return {
+      response: json({ message: "Invalid roll number format" }, 400, {}, requestId),
+    };
   }
 
   if (password.length < 1 || password.length > 80) {
-    return { response: json({ message: "Invalid password length" }, 400) };
+    return {
+      response: json({ message: "Invalid password length" }, 400, {}, requestId),
+    };
   }
 
   return {
@@ -626,10 +675,15 @@ async function scrapeSubjectAttendance(client, subject) {
 
 async function scrapeLogin(payload) {
   const startedAt = Date.now();
-  const { rollNumber, password, forceRefresh } = payload;
+  const { rollNumber, password, forceRefresh, requestId } = payload;
 
   if (!rollNumber || !password) {
-    return json({ message: "Roll number and password required" }, 400);
+    return json(
+      { message: "Roll number and password required" },
+      400,
+      {},
+      requestId
+    );
   }
 
   if (!forceRefresh) {
@@ -640,7 +694,7 @@ async function scrapeLogin(payload) {
         cached: true,
         runtime: "cloudflare-native",
         responseTimeMs: Date.now() - startedAt,
-      });
+      }, 200, {}, requestId);
     }
   }
 
@@ -657,7 +711,19 @@ async function scrapeLogin(payload) {
   const dashboardResponse = await client.get(`${BASE_URL}/DashBoardStudent`);
 
   if (dashboardResponse.url.includes("Elogin")) {
-    return json({ message: "Invalid roll number or password" }, 401);
+    logEvent("warn", "login.invalid_credentials", {
+      requestId,
+      rollNumber,
+      route: "/login",
+      runtime: "cloudflare-native",
+    });
+
+    return json(
+      { message: "Invalid roll number or password" },
+      401,
+      {},
+      requestId
+    );
   }
 
   const $ = cheerio.load(dashboardResponse.text);
@@ -706,7 +772,13 @@ async function scrapeLogin(payload) {
     ),
     imageToBase64(client, finalPhotoUrl),
     scrapeResult(client, $).catch((error) => {
-      console.log("Result scraping failed:", error.message);
+      logEvent("warn", "result.scrape_failed", {
+        requestId,
+        rollNumber,
+        route: "/login",
+        runtime: "cloudflare-native",
+        error: String(error?.message || error),
+      });
 
       return {
         available: false,
@@ -741,13 +813,14 @@ async function scrapeLogin(payload) {
     cached: false,
     runtime: "cloudflare-native",
     responseTimeMs: Date.now() - startedAt,
+    requestId,
   };
 
   setCachedData(rollNumber, responsePayload);
-  return json(responsePayload);
+  return json(responsePayload, 200, {}, requestId);
 }
 
-async function proxyToRailway(request, env, pathname) {
+async function proxyToRailway(request, env, pathname, requestId) {
   const baseUrl = normalizeBaseUrl(env.RAILWAY_BACKEND_URL);
 
   if (!baseUrl || baseUrl.includes("replace-with-your-railway-url")) {
@@ -755,7 +828,9 @@ async function proxyToRailway(request, env, pathname) {
       {
         message: "Cloudflare worker is missing RAILWAY_BACKEND_URL.",
       },
-      500
+      500,
+      {},
+      requestId
     );
   }
 
@@ -780,6 +855,7 @@ async function proxyToRailway(request, env, pathname) {
     });
     responseHeaders.set("Cache-Control", "no-store");
     responseHeaders.set("X-RollCall-Runtime", "railway-proxy");
+    responseHeaders.set("X-Request-Id", requestId);
 
     return new Response(upstreamResponse.body, {
       status: upstreamResponse.status,
@@ -787,6 +863,13 @@ async function proxyToRailway(request, env, pathname) {
     });
   } catch (error) {
     const aborted = error?.name === "AbortError";
+    logEvent("error", "railway.proxy_failed", {
+      requestId,
+      route: pathname,
+      runtime: "railway-proxy",
+      status: aborted ? 504 : 502,
+      error: String(error?.message || error),
+    });
 
     return json(
       {
@@ -795,26 +878,31 @@ async function proxyToRailway(request, env, pathname) {
           : "Cloudflare proxy failed to reach Railway backend.",
         error: String(error?.message || error),
       },
-      aborted ? 504 : 502
+      aborted ? 504 : 502,
+      {},
+      requestId
     );
   } finally {
     clearTimeout(timeout);
   }
 }
 
-async function handleLogin(request, env) {
-  const bodyResult = await readJsonBody(request);
+async function handleLogin(request, env, requestId) {
+  const bodyResult = await readJsonBody(request, requestId);
   if (bodyResult.response) {
     return bodyResult.response;
   }
 
   const { body, bodyText } = bodyResult;
-  const validation = validateLoginPayload(body);
+  const validation = validateLoginPayload(body, requestId);
   if (validation.response) {
     return validation.response;
   }
 
-  const payload = validation.payload;
+  const payload = {
+    ...validation.payload,
+    requestId,
+  };
   const retryAfterForIp = checkRateLimit(
     `ip:${getClientIp(request)}`,
     LOGIN_IP_LIMIT,
@@ -828,7 +916,8 @@ async function handleLogin(request, env) {
         retryAfterSeconds: retryAfterForIp,
       },
       429,
-      { "Retry-After": String(retryAfterForIp) }
+      { "Retry-After": String(retryAfterForIp) },
+      requestId
     );
   }
 
@@ -845,7 +934,8 @@ async function handleLogin(request, env) {
         retryAfterSeconds: retryAfterForAccount,
       },
       429,
-      { "Retry-After": String(retryAfterForAccount) }
+      { "Retry-After": String(retryAfterForAccount) },
+      requestId
     );
   }
 
@@ -859,14 +949,23 @@ async function handleLogin(request, env) {
         body: bodyText,
       }),
       env,
-      "/login"
+      "/login",
+      requestId
     );
   }
 
   try {
     return await scrapeLogin(payload);
   } catch (error) {
-    console.log("Native scraper failed:", error.message);
+    const aborted = error?.name === "AbortError";
+    logEvent("error", "native.scraper_failed", {
+      requestId,
+      rollNumber: payload.rollNumber,
+      route: "/login",
+      runtime: "cloudflare-native",
+      status: aborted ? 504 : 500,
+      error: String(error?.message || error),
+    });
 
     if (env.NATIVE_FALLBACK_TO_RAILWAY !== "false") {
       return proxyToRailway(
@@ -876,16 +975,21 @@ async function handleLogin(request, env) {
           body: bodyText,
         }),
         env,
-        "/login"
+        "/login",
+        requestId
       );
     }
 
     return json(
       {
-        message: "Cloudflare native scraper failed",
+        message: aborted
+          ? "AGC portal took too long to respond. Please try again."
+          : "Cloudflare native scraper failed",
         error: String(error?.message || error),
       },
-      500
+      aborted ? 504 : 500,
+      {},
+      requestId
     );
   }
 }
@@ -893,35 +997,64 @@ async function handleLogin(request, env) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    const requestId = createRequestId();
 
     if (request.method === "OPTIONS") {
       return new Response(null, {
         status: 204,
-        headers: CORS_HEADERS,
+        headers: {
+          ...CORS_HEADERS,
+          "X-Request-Id": requestId,
+        },
       });
     }
 
-    if (url.pathname === "/" || url.pathname === "/health") {
-      return json({
-        status: "success",
-        service: "RollCall+ Cloudflare API",
-        version: "cloudflare-native-v1",
-        nativeScraperEnabled: env.USE_NATIVE_SCRAPER === "true",
-        railwayFallbackEnabled: env.NATIVE_FALLBACK_TO_RAILWAY !== "false",
-        upstreamConfigured:
-          !!env.RAILWAY_BACKEND_URL &&
-          !env.RAILWAY_BACKEND_URL.includes("replace-with-your-railway-url"),
-      });
-    }
-
-    if (url.pathname === "/login") {
-      if (request.method !== "POST") {
-        return json({ message: "Method not allowed" }, 405);
+    try {
+      if (url.pathname === "/" || url.pathname === "/health") {
+        return json(
+          {
+            status: "success",
+            service: "RollCall+ Cloudflare API",
+            version: "cloudflare-native-v1",
+            nativeScraperEnabled: env.USE_NATIVE_SCRAPER === "true",
+            railwayFallbackEnabled: env.NATIVE_FALLBACK_TO_RAILWAY !== "false",
+            upstreamConfigured:
+              !!env.RAILWAY_BACKEND_URL &&
+              !env.RAILWAY_BACKEND_URL.includes("replace-with-your-railway-url"),
+          },
+          200,
+          {},
+          requestId
+        );
       }
 
-      return handleLogin(request, env);
-    }
+      if (url.pathname === "/login") {
+        if (request.method !== "POST") {
+          return json({ message: "Method not allowed" }, 405, {}, requestId);
+        }
 
-    return json({ message: "Not found" }, 404);
+        return handleLogin(request, env, requestId);
+      }
+
+      return json({ message: "Not found" }, 404, {}, requestId);
+    } catch (error) {
+      logEvent("error", "worker.unhandled_error", {
+        requestId,
+        route: url.pathname,
+        method: request.method,
+        status: 500,
+        error: String(error?.message || error),
+      });
+
+      return json(
+        {
+          message: "RollCall+ API hit an unexpected error.",
+          error: String(error?.message || error),
+        },
+        500,
+        {},
+        requestId
+      );
+    }
   },
 };

@@ -21,6 +21,7 @@ type HealthResponse = {
   nativeScraperEnabled?: boolean;
   railwayFallbackEnabled?: boolean;
   upstreamConfigured?: boolean;
+  requestId?: string;
 };
 
 type StatusState = {
@@ -62,15 +63,20 @@ export default function BackendStatus() {
           Accept: "application/json",
         },
       });
+      const requestId = response.headers.get("X-Request-Id") || "";
       const text = await response.text();
       const data = text ? JSON.parse(text) : {};
 
       if (!response.ok) {
-        throw new Error(data?.message || `Health check failed (${response.status})`);
+        throw new Error(
+          `${data?.message || `Health check failed (${response.status})`}${
+            data?.requestId || requestId ? `\nRequest ID: ${data?.requestId || requestId}` : ""
+          }`
+        );
       }
 
       setStatus({
-        data,
+        data: { ...data, requestId: data?.requestId || requestId },
         error: "",
         latencyMs: Date.now() - startedAt,
         checkedAt: new Date().toISOString(),
@@ -177,6 +183,7 @@ export default function BackendStatus() {
           <View style={[detailCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <DetailRow label="API Base" value={API_BASE_URL} />
             <DetailRow label="Health URL" value={HEALTH_URL} />
+            <DetailRow label="Request ID" value={status.data?.requestId || "Not available"} />
             <DetailRow
               label="Native scraper"
               value={status.data?.nativeScraperEnabled ? "True" : "False"}

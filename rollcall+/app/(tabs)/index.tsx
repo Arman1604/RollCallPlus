@@ -203,9 +203,15 @@ export default function LoginScreen() {
       });
 
       const data = await response.json();
+      const requestId = data?.requestId || response.headers.get("X-Request-Id");
 
       if (!response.ok) {
-        Alert.alert("Login Failed", data.message || "Invalid credentials");
+        Alert.alert(
+          "Login Failed",
+          `${data.message || "Invalid credentials"}${
+            requestId ? `\n\nRequest ID: ${requestId}` : ""
+          }`
+        );
         return;
       }
 
@@ -232,7 +238,10 @@ export default function LoginScreen() {
       router.replace("/dashboard");
     } catch (error) {
       console.log("Login error:", error);
-      Alert.alert("Server Error", "Could not connect to RollCall+ server");
+      Alert.alert(
+        "Server Error",
+        "Could not connect to RollCall+ server. Please check Backend Status from Profile."
+      );
     } finally {
       setLoading(false);
     }

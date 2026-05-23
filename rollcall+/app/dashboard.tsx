@@ -109,7 +109,10 @@ export default function Dashboard() {
       const data = await response.json();
 
       if (!response.ok) {
-        console.log("Refresh failed:", data);
+        console.log("Refresh failed:", {
+          message: data?.message,
+          requestId: data?.requestId || response.headers.get("X-Request-Id"),
+        });
         return;
       }
 
