@@ -1722,6 +1722,343 @@ async function handleSupportTicketReply(request, env, requestId) {
   );
 }
 
+function supportAdminPage() {
+  const html = String.raw`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RollCall+ Support Admin</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #64748b;
+      --border: #e2e8f0;
+      --primary: #7c3aed;
+      --primary-soft: #ede9fe;
+      --danger: #ef4444;
+      --success: #16a34a;
+      --info: #0284c7;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    main {
+      width: min(1100px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 34px 0 56px;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      align-items: flex-start;
+      margin-bottom: 24px;
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(30px, 5vw, 48px);
+      line-height: 1;
+      letter-spacing: 0;
+    }
+    .sub {
+      color: var(--muted);
+      margin: 10px 0 0;
+      font-size: 16px;
+    }
+    .panel, .ticket {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06);
+    }
+    .panel {
+      padding: 18px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      margin-bottom: 18px;
+      align-items: end;
+    }
+    label {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+    input, textarea, select {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: #f8fafc;
+      color: var(--text);
+      padding: 13px 14px;
+      font: inherit;
+      outline: none;
+    }
+    input:focus, textarea:focus, select:focus {
+      border-color: #a78bfa;
+      box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.12);
+    }
+    button {
+      border: 0;
+      border-radius: 14px;
+      padding: 13px 16px;
+      font-weight: 900;
+      color: white;
+      background: var(--primary);
+      cursor: pointer;
+      min-height: 48px;
+    }
+    button.secondary {
+      background: var(--primary-soft);
+      color: var(--primary);
+    }
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin: 16px 0 20px;
+    }
+    .status {
+      padding: 10px 12px;
+      border-radius: 999px;
+      background: var(--primary-soft);
+      color: var(--primary);
+      font-size: 13px;
+      font-weight: 900;
+    }
+    .tickets {
+      display: grid;
+      gap: 14px;
+    }
+    .ticket {
+      padding: 18px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 340px;
+      gap: 18px;
+    }
+    .ticket h2 {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.25;
+    }
+    .meta {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 10px 0 14px;
+    }
+    .pill {
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: #f1f5f9;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+    }
+    .pill.open { color: var(--success); background: #dcfce7; }
+    .pill.replied { color: var(--info); background: #e0f2fe; }
+    .pill.closed { color: var(--muted); background: #e2e8f0; }
+    .message {
+      white-space: pre-wrap;
+      color: #334155;
+      line-height: 1.55;
+      margin: 0;
+    }
+    .replyBox textarea {
+      min-height: 116px;
+      resize: vertical;
+      margin-bottom: 10px;
+    }
+    .replyActions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .empty {
+      padding: 28px;
+      text-align: center;
+      color: var(--muted);
+      font-weight: 800;
+    }
+    @media (max-width: 820px) {
+      header, .panel, .ticket { display: block; }
+      .panel button { width: 100%; margin-top: 12px; }
+      .replyBox { margin-top: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>RollCall+ Support</h1>
+        <p class="sub">View tickets, reply to students, and update ticket status.</p>
+      </div>
+      <span class="status" id="count">Not loaded</span>
+    </header>
+
+    <section class="panel">
+      <div>
+        <label for="token">Admin token</label>
+        <input id="token" placeholder="Paste SUPPORT_ADMIN_TOKEN" autocomplete="off" />
+      </div>
+      <button id="load">Load tickets</button>
+    </section>
+
+    <div class="toolbar">
+      <button class="secondary" id="refresh">Refresh</button>
+      <button class="secondary" id="clearToken">Clear token</button>
+    </div>
+
+    <section class="tickets" id="tickets">
+      <div class="panel empty">Paste your admin token and load tickets.</div>
+    </section>
+  </main>
+
+  <script>
+    const tokenInput = document.getElementById("token");
+    const ticketsEl = document.getElementById("tickets");
+    const countEl = document.getElementById("count");
+    tokenInput.value = localStorage.getItem("rollcall_support_token") || "";
+
+    function escapeHtml(value) {
+      return String(value || "").replace(/[&<>"']/g, (char) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;",
+      }[char]));
+    }
+
+    function getToken() {
+      const token = tokenInput.value.trim();
+      if (token) localStorage.setItem("rollcall_support_token", token);
+      return token;
+    }
+
+    async function api(path, options = {}) {
+      const token = getToken();
+      if (!token) throw new Error("Paste admin token first.");
+      const response = await fetch(path, {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + token,
+          ...(options.headers || {}),
+        },
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Request failed");
+      return data;
+    }
+
+    async function loadTickets() {
+      ticketsEl.innerHTML = '<div class="panel empty">Loading tickets...</div>';
+      try {
+        const data = await api("/support-tickets");
+        const tickets = data.tickets || [];
+        countEl.textContent = tickets.length + " ticket" + (tickets.length === 1 ? "" : "s");
+        ticketsEl.innerHTML = tickets.length
+          ? tickets.map(renderTicket).join("")
+          : '<div class="panel empty">No support tickets yet.</div>';
+      } catch (error) {
+        countEl.textContent = "Error";
+        ticketsEl.innerHTML = '<div class="panel empty">' + escapeHtml(error.message) + '</div>';
+      }
+    }
+
+    function renderTicket(ticket) {
+      const reply = ticket.reply?.message
+        ? '<p class="message"><strong>Current reply:</strong><br>' + escapeHtml(ticket.reply.message) + '</p>'
+        : "";
+      return '<article class="ticket">' +
+        '<div>' +
+          '<h2>' + escapeHtml(ticket.id) + '</h2>' +
+          '<div class="meta">' +
+            '<span class="pill ' + escapeHtml(ticket.status) + '">' + escapeHtml(ticket.status || "open") + '</span>' +
+            '<span class="pill">' + escapeHtml(ticket.category) + '</span>' +
+            '<span class="pill">' + escapeHtml(ticket.priority) + '</span>' +
+            '<span class="pill">Roll ' + escapeHtml(ticket.rollNumber || "N/A") + '</span>' +
+          '</div>' +
+          '<p class="message">' + escapeHtml(ticket.message) + '</p>' +
+          '<div class="meta">' +
+            '<span class="pill">Contact: ' + escapeHtml(ticket.contact || "Not provided") + '</span>' +
+            '<span class="pill">' + escapeHtml(ticket.createdAt || "") + '</span>' +
+          '</div>' +
+          reply +
+        '</div>' +
+        '<div class="replyBox">' +
+          '<label>Reply</label>' +
+          '<textarea id="reply-' + escapeHtml(ticket.id) + '" placeholder="Type your reply">' + escapeHtml(ticket.reply?.message || "") + '</textarea>' +
+          '<label>Status</label>' +
+          '<select id="status-' + escapeHtml(ticket.id) + '">' +
+            '<option value="replied"' + (ticket.status === "replied" ? " selected" : "") + '>Replied</option>' +
+            '<option value="open"' + (ticket.status === "open" ? " selected" : "") + '>Open</option>' +
+            '<option value="closed"' + (ticket.status === "closed" ? " selected" : "") + '>Closed</option>' +
+          '</select>' +
+          '<div class="replyActions" style="margin-top:10px">' +
+            '<button onclick="sendReply(\\'' + escapeHtml(ticket.id) + '\\')">Send reply</button>' +
+            '<button class="secondary" onclick="copyId(\\'' + escapeHtml(ticket.id) + '\\')">Copy ID</button>' +
+          '</div>' +
+        '</div>' +
+      '</article>';
+    }
+
+    async function sendReply(ticketId) {
+      const reply = document.getElementById("reply-" + ticketId).value.trim();
+      const status = document.getElementById("status-" + ticketId).value;
+      if (!reply) return alert("Type a reply first.");
+      try {
+        await api("/support-ticket-reply", {
+          method: "POST",
+          body: JSON.stringify({ ticketId, reply, status }),
+        });
+        alert("Reply saved.");
+        await loadTickets();
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+
+    function copyId(ticketId) {
+      navigator.clipboard?.writeText(ticketId);
+      alert("Ticket ID copied.");
+    }
+
+    document.getElementById("load").onclick = loadTickets;
+    document.getElementById("refresh").onclick = loadTickets;
+    document.getElementById("clearToken").onclick = () => {
+      localStorage.removeItem("rollcall_support_token");
+      tokenInput.value = "";
+    };
+  </script>
+</body>
+</html>`;
+
+  return new Response(html, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+    },
+  });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -1738,6 +2075,14 @@ export default {
     }
 
     try {
+      if (url.pathname === "/support-admin") {
+        if (request.method !== "GET") {
+          return json({ message: "Method not allowed" }, 405, {}, requestId);
+        }
+
+        return supportAdminPage();
+      }
+
       if (url.pathname === "/" || url.pathname === "/health") {
         return json(
           {
