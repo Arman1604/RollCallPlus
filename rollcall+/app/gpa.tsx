@@ -37,11 +37,6 @@ type ResultData = {
   subjects?: ResultSubject[];
 };
 
-type ManualSGPA = {
-  semester: string;
-  sgpa: string;
-};
-
 function getGradeColor(grade: string) {
   const g = String(grade || "").toUpperCase();
 
@@ -82,11 +77,6 @@ function isLawStudent(student: any) {
     course.includes("b com llb") ||
     course.includes("bachelor of laws")
   );
-}
-
-function getManualStorageKey(student: any) {
-  const rollNumber = String(student?.rollNumber || "").trim();
-  return rollNumber ? `manualSGPA:${rollNumber}` : "manualSGPA";
 }
 
 function getGnduStorageKey(student: any) {
@@ -137,19 +127,15 @@ export default function GPATracker() {
   };
 
   const lawStudent = isLawStudent(student);
-  const manualStorageKey = getManualStorageKey(student);
   const gnduStorageKey = getGnduStorageKey(student);
   const gnduRollNumber = getGnduRollNumber(student);
   const gnduRollStorageKey = `${gnduStorageKey}:roll`;
 
-  const [semester, setSemester] = useState("");
-  const [sgpaInput, setSgpaInput] = useState("");
   const [gnduRollInput, setGnduRollInput] = useState(gnduRollNumber);
   const [gnduYearInput, setGnduYearInput] = useState("2025");
   const [gnduMonthInput, setGnduMonthInput] = useState("12");
   const [gnduCourseTypeInput, setGnduCourseTypeInput] = useState("P");
   const [gnduSemesterCodeInput, setGnduSemesterCodeInput] = useState("112403");
-  const [manualData, setManualData] = useState<ManualSGPA[]>([]);
   const [gnduResults, setGnduResults] = useState<ResultData[]>([]);
   const [gnduLoading, setGnduLoading] = useState(false);
   const [showSemesterPicker, setShowSemesterPicker] = useState(false);
@@ -187,33 +173,6 @@ export default function GPATracker() {
   const sgpaFromPortal = hasRealSgpa ? Number(activeResult.sgpa) : 0;
 
   const portalAvailable = activeResult.available === true || hasSubjects;
-
-  const loadManualData = useCallback(async () => {
-    try {
-      const saved = await AsyncStorage.getItem(manualStorageKey);
-
-      if (saved) {
-        setManualData(JSON.parse(saved));
-        return;
-      }
-
-      const legacySaved = await AsyncStorage.getItem("manualSGPA");
-
-      if (legacySaved && manualStorageKey !== "manualSGPA") {
-        setManualData(JSON.parse(legacySaved));
-        await AsyncStorage.setItem(manualStorageKey, legacySaved);
-        return;
-      }
-
-      setManualData([]);
-    } catch (error) {
-      console.log("Manual SGPA load error:", error);
-    }
-  }, [manualStorageKey]);
-
-  useEffect(() => {
-    loadManualData();
-  }, [loadManualData]);
 
   const loadGnduResults = useCallback(async () => {
     try {
@@ -296,48 +255,6 @@ export default function GPATracker() {
     }
   }
 
-  async function saveManualData(data: ManualSGPA[]) {
-    setManualData(data);
-    await AsyncStorage.setItem(manualStorageKey, JSON.stringify(data));
-  }
-
-  async function addSGPA() {
-    if (!semester.trim() || !sgpaInput.trim()) {
-      Alert.alert("Missing Details", "Enter semester and SGPA");
-      return;
-    }
-
-    const sgpaNumber = Number(sgpaInput);
-
-    if (isNaN(sgpaNumber) || sgpaNumber < 0 || sgpaNumber > 10) {
-      Alert.alert("Invalid SGPA", "SGPA should be between 0 and 10");
-      return;
-    }
-
-    const newData = [
-      ...manualData.filter(
-        (item) => item.semester.toLowerCase() !== semester.trim().toLowerCase()
-      ),
-      {
-        semester: semester.trim(),
-        sgpa: sgpaInput.trim(),
-      },
-    ];
-
-    await saveManualData(newData);
-    setSemester("");
-    setSgpaInput("");
-  }
-
-  async function deleteSGPA(index: number) {
-    const updated = manualData.filter((_, i) => i !== index);
-    await saveManualData(updated);
-  }
-
-  const validManualData = manualData.filter(
-    (item) => !isNaN(Number(item.sgpa)) && Number(item.sgpa) > 0
-  );
-
   const validPortalResults = (allPortalResults || []).filter(
     (item) =>
       item?.sgpa &&
@@ -346,26 +263,11 @@ export default function GPATracker() {
       !isNaN(Number(item.sgpa))
   );
 
-  const combinedSemesters = [
-    ...validPortalResults.map((item) => ({
+  const cgpaSemesters = validPortalResults.map((item) => ({
       semester: item.semester || "Portal Semester",
       sgpa: String(item.sgpa),
       source: "Portal",
-    })),
-    ...validManualData.map((item) => ({
-      semester: item.semester,
-      sgpa: item.sgpa,
-      source: "Manual",
-    })),
-  ];
-
-  const cgpaSemesters = lawStudent
-    ? combinedSemesters
-    : validPortalResults.map((item) => ({
-        semester: item.semester || "Portal Semester",
-        sgpa: String(item.sgpa),
-        source: "Portal",
-      }));
+    }));
 
   const totalCGPA =
     cgpaSemesters.length === 0
@@ -376,20 +278,9 @@ export default function GPATracker() {
             cgpaSemesters.length
           ).toFixed(2)
         );
-  const latestManualSemester = validManualData[validManualData.length - 1];
-  const latestManualSGPA = latestManualSemester
-    ? Number(latestManualSemester.sgpa)
-    : 0;
+  const displayScore = portalAvailable && hasRealSgpa ? sgpaFromPortal : 0;
 
-  const displayScore =
-    portalAvailable && hasRealSgpa
-      ? sgpaFromPortal
-      : lawStudent
-      ? latestManualSGPA
-      : 0;
-
-  const portalMissingSgpa =
-    portalAvailable && !hasRealSgpa && !(lawStudent && latestManualSGPA > 0);
+  const portalMissingSgpa = portalAvailable && !hasRealSgpa;
 
   const mainScoreText = portalMissingSgpa ? "N/A" : displayScore || "0";
 
@@ -416,9 +307,7 @@ export default function GPATracker() {
                   ? `${getCompactSemesterTitle(activeResult?.semester || "Current")} SGPA`
                   : "Portal Result"
                 : lawStudent
-                ? latestManualSemester
-                  ? `${latestManualSemester.semester} SGPA`
-                  : "Law GPA"
+                ? "Law GPA"
                 : "Portal Result"}
             </Text>
 
@@ -446,7 +335,7 @@ export default function GPATracker() {
               {getPerformanceText(
                 displayScore,
                 portalAvailable && !lawStudent,
-                hasRealSgpa || (lawStudent && latestManualSGPA > 0)
+                hasRealSgpa
               )}
             </Text>
 
@@ -487,11 +376,11 @@ export default function GPATracker() {
             )}
           </View>
 
-          {lawStudent && combinedSemesters.length > 0 && (
+          {lawStudent && cgpaSemesters.length > 0 && (
             <>
               <Text style={[sectionTitle, { color: theme.text }]}>CGPA Semesters</Text>
 
-              {combinedSemesters.map((item, index) => (
+              {cgpaSemesters.map((item, index) => (
                 <View key={item.semester + index} style={[subjectCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                   <View style={semesterResultRow}>
                     <View style={semesterResultInfo}>
@@ -674,64 +563,6 @@ export default function GPATracker() {
                   </Text>
                 </TouchableOpacity>
               </View>
-
-              <Text style={[sectionTitle, { color: theme.text }]}>Law Semester SGPA</Text>
-
-              <View style={[formCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                <Text style={[emptyText, { color: theme.muted, textAlign: "left", marginBottom: 12 }]}>
-                  Add the semester SGPA from your Law/GNDU result. The latest saved semester appears in the main card and all saved semesters build your CGPA.
-                </Text>
-
-                <TextInput
-                  placeholder="Semester e.g. Sem 2"
-                  placeholderTextColor={theme.subtle}
-                  value={semester}
-                  onChangeText={setSemester}
-                  style={[input, { backgroundColor: theme.input, color: theme.text, borderColor: theme.borderStrong }]}
-                />
-
-                <TextInput
-                  placeholder="SGPA e.g. 8.2"
-                  placeholderTextColor={theme.subtle}
-                  value={sgpaInput}
-                  onChangeText={setSgpaInput}
-                  keyboardType="decimal-pad"
-                  style={[input, { backgroundColor: theme.input, color: theme.text, borderColor: theme.borderStrong }]}
-                />
-
-                <TouchableOpacity onPress={addSGPA} style={button}>
-                  <Text style={buttonText}>Save SGPA</Text>
-                </TouchableOpacity>
-              </View>
-
-              <Text style={[sectionTitle, { color: theme.text }]}>Manual Semester History</Text>
-
-              {manualData.length === 0 ? (
-                <View style={[emptyCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                  <Text style={[emptyText, { color: theme.muted }]}>
-                    No manual SGPA added yet. Add older or missing semesters here.
-                  </Text>
-                </View>
-              ) : (
-                manualData.map((item, index) => (
-                  <View key={item.semester + index} style={[subjectCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                    <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                      <View>
-                        <Text style={[subjectName, { color: theme.text }]}>{item.semester}</Text>
-                        <Text style={[mutedText, { color: theme.subtle }]}>Saved manually</Text>
-                      </View>
-
-                      <View style={{ alignItems: "flex-end" }}>
-                        <Text style={manualScore}>{item.sgpa}</Text>
-
-                        <TouchableOpacity onPress={() => deleteSGPA(index)}>
-                          <Text style={deleteText}>Delete</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  </View>
-                ))
-              )}
             </>
           )}
         </View>
@@ -1037,12 +868,6 @@ const buttonText = {
   fontSize: 16,
 };
 
-const manualScore = {
-  color: "#22c55e",
-  fontSize: 26,
-  fontWeight: "900" as const,
-};
-
 const semesterScoreBox = {
   minWidth: 72,
   maxWidth: 92,
@@ -1058,12 +883,6 @@ const semesterScoreBox = {
 const semesterScoreText = {
   color: "#22c55e",
   fontSize: 22,
-  fontWeight: "900" as const,
-};
-
-const deleteText = {
-  color: "#ef4444",
-  marginTop: 8,
   fontWeight: "900" as const,
 };
 
