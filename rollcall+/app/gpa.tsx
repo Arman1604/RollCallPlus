@@ -137,6 +137,7 @@ export default function GPATracker() {
   const [gnduYearInput, setGnduYearInput] = useState("2025");
   const [gnduMonthInput, setGnduMonthInput] = useState("12");
   const [gnduCourseTypeInput, setGnduCourseTypeInput] = useState("P");
+  const [gnduSemesterCodeInput, setGnduSemesterCodeInput] = useState("112403");
   const [manualData, setManualData] = useState<ManualSGPA[]>([]);
   const [gnduResults, setGnduResults] = useState<ResultData[]>([]);
   const [gnduLoading, setGnduLoading] = useState(false);
@@ -250,6 +251,7 @@ export default function GPATracker() {
           month: gnduMonthInput.trim(),
           courseType: gnduCourseTypeInput.trim(),
           courseCode: rollToFetch.slice(0, 4),
+          semesterCode: gnduSemesterCodeInput.trim(),
         }),
       });
       const data = await response.json();
@@ -634,6 +636,15 @@ export default function GPATracker() {
                 <Text style={[mutedText, { color: theme.subtle, marginBottom: 12 }]}>
                   Month: 5 May, 12 December. Type: P pass course, C- college course.
                 </Text>
+
+                <TextInput
+                  placeholder="Semester code e.g. 112403"
+                  placeholderTextColor={theme.subtle}
+                  value={gnduSemesterCodeInput}
+                  onChangeText={setGnduSemesterCodeInput}
+                  keyboardType="number-pad"
+                  style={[input, { backgroundColor: theme.input, color: theme.text, borderColor: theme.borderStrong }]}
+                />
 
                 <TouchableOpacity
                   onPress={fetchGnduResult}

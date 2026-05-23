@@ -198,6 +198,7 @@ function validateGnduPayload(body, requestId) {
       month: String(body.month || ""),
       courseType: String(body.courseType || ""),
       courseCode: String(body.courseCode || ""),
+      semesterCode: String(body.semesterCode || ""),
     },
   };
 }
@@ -604,6 +605,7 @@ async function scrapeGnduResult(payload) {
   const courseTypes = payload.courseType ? [payload.courseType] : ["P"];
   const inferredCourseCode =
     payload.courseCode || payload.rollNumber.match(/^\d{4}/)?.[0] || "";
+  const targetSemesterCode = payload.semesterCode || "";
   const collected = [];
   const diagnostics = {
     sessionsChecked: 0,
@@ -663,7 +665,9 @@ async function scrapeGnduResult(payload) {
             DrpDwnCMaster: course.value,
           });
           const semesterPage = cheerio.load(semesterHtml);
-          const semesters = getSelectOptions(semesterPage, "#DrpDwnCdetail");
+          const semesters = getSelectOptions(semesterPage, "#DrpDwnCdetail").filter(
+            (item) => !targetSemesterCode || item.value === targetSemesterCode
+          );
 
           for (const semester of semesters) {
             diagnostics.semestersChecked += 1;
