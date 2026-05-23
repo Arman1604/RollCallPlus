@@ -680,12 +680,6 @@ export default function GPATracker() {
                   </View>
                 </View>
 
-                <View style={[detectedCourseBox, { backgroundColor: theme.input, borderColor: theme.border }]}>
-                  <Text style={[detectedCourseText, { color: theme.text }]}>
-                    Course {inferredGnduCourseCode}
-                  </Text>
-                </View>
-
                 <Text style={[mutedText, { color: theme.subtle, marginBottom: 12 }]}>
                   Searching {selectedGnduMonth} {gnduYearInput}, {selectedGnduCourseType}, {selectedGnduSemester}.
                 </Text>
@@ -1114,20 +1108,6 @@ const gnduHelpLine = {
   lineHeight: 18,
   marginTop: -2,
   marginBottom: 12,
-};
-
-const detectedCourseBox = {
-  alignSelf: "flex-start" as const,
-  paddingHorizontal: 12,
-  paddingVertical: 8,
-  borderRadius: 999,
-  borderWidth: 1,
-  marginBottom: 12,
-};
-
-const detectedCourseText = {
-  fontSize: 13,
-  fontWeight: "900" as const,
 };
 
 const dropdownGrid = {
