@@ -39,6 +39,14 @@ type ResultData = {
 
 function getGradeColor(grade: string) {
   const g = String(grade || "").toUpperCase();
+  const numericGrade = Number(g);
+
+  if (!isNaN(numericGrade)) {
+    if (numericGrade >= 75) return "#22c55e";
+    if (numericGrade >= 60) return "#38bdf8";
+    if (numericGrade >= 50) return "#f59e0b";
+    return "#ef4444";
+  }
 
   if (g.includes("O") || g.includes("A")) return "#22c55e";
   if (g.includes("B")) return "#38bdf8";
@@ -130,15 +138,15 @@ function mergeResultHistory(existing: ResultData[], incoming: ResultData[]) {
 const GNDU_YEAR_OPTIONS = ["2026", "2025", "2024", "2023"];
 
 const GNDU_MONTH_OPTIONS = [
-  { label: "April", value: "4", help: "April session" },
-  { label: "May", value: "5", help: "May session" },
-  { label: "September", value: "9", help: "September session" },
-  { label: "December", value: "12", help: "December session" },
+  { label: "April", value: "4" },
+  { label: "May", value: "5" },
+  { label: "September", value: "9" },
+  { label: "December", value: "12" },
 ];
 
 const GNDU_COURSE_TYPE_OPTIONS = [
-  { label: "Pass Course", value: "P", help: "Most Law results" },
-  { label: "College Course", value: "C-", help: "Use if GNDU lists your result under college course" },
+  { label: "Pass Course", value: "P" },
+  { label: "College Course", value: "C-" },
 ];
 
 const GNDU_SEMESTERS = [
@@ -362,14 +370,14 @@ export default function GPATracker() {
       <Stack.Screen options={{ headerShown: false }} />
 
       <ScrollView style={{ flex: 1, backgroundColor: theme.background }}>
-        <View style={{ padding: 20, paddingTop: 68, paddingBottom: 120 }}>
+        <View style={{ padding: 20, paddingTop: 68, paddingBottom: 190 }}>
           <Text style={eyebrow}>ACADEMIC PERFORMANCE</Text>
 
           <Text style={[title, { color: theme.text }]}>GPA & Result</Text>
 
           <Text style={[subtitle, { color: theme.muted }]}>
             {lawStudent
-              ? "Law GPA from portal or saved SGPA"
+              ? "Law GPA from GNDU portal results"
               : "Real academic data from college portal"}
           </Text>
 
@@ -424,7 +432,7 @@ export default function GPATracker() {
 
                 <Text style={{ color: theme.subtle, marginTop: 6 }}>
                   {lawStudent
-                    ? `Calculated from ${cgpaSemesters.length} portal/saved semester${
+                    ? `Calculated from ${cgpaSemesters.length} portal semester${
                         cgpaSemesters.length === 1 ? "" : "s"
                       }`
                     : `Calculated from ${cgpaSemesters.length} portal semester${
@@ -443,7 +451,7 @@ export default function GPATracker() {
             {!portalAvailable && (
               <Text style={helperTextMuted}>
                 {lawStudent
-                  ? "Law portal result is not available here yet. Add your semester SGPA below and RollCall+ will calculate your GPA."
+                  ? "Fetch your Law result from the GNDU portal below."
                   : "Your department result should come from AGC portal, but RollCall+ could not read it yet."}
               </Text>
             )}
@@ -572,7 +580,7 @@ export default function GPATracker() {
 
               <View style={[formCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                 <Text style={[emptyText, { color: theme.muted, textAlign: "left", marginBottom: 12 }]}>
-                  Enter your GNDU university/exam roll number exactly as printed on the result portal.
+                  Use your GNDU university/exam roll number.
                 </Text>
 
                 <TextInput
@@ -587,7 +595,7 @@ export default function GPATracker() {
                 <View style={[gnduGuideBox, { backgroundColor: theme.surfaceAlt, borderColor: theme.border }]}>
                   <Text style={[gnduGuideTitle, { color: theme.text }]}>How to choose</Text>
                   <Text style={[gnduGuideText, { color: theme.muted }]}>
-                    Year is the result year. Month is the exam session. No date is needed. Course type is usually Pass Course for Law. Course is detected from the first four digits of your roll number.
+                    Pick the result year, exam session, course type, and semester. No date is needed.
                   </Text>
                 </View>
 
@@ -635,9 +643,6 @@ export default function GPATracker() {
                       <Text style={[optionChipText, { color: gnduMonthInput === month.value ? "white" : theme.text }]}>
                         {month.label}
                       </Text>
-                      <Text style={[optionChipHelp, { color: gnduMonthInput === month.value ? "#ddd6fe" : theme.subtle }]}>
-                        {month.help}
-                      </Text>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -666,15 +671,12 @@ export default function GPATracker() {
                       <Text style={[optionChipText, { color: gnduCourseTypeInput === courseType.value ? "white" : theme.text }]}>
                         {courseType.label}
                       </Text>
-                      <Text style={[optionChipHelp, { color: gnduCourseTypeInput === courseType.value ? "#ddd6fe" : theme.subtle }]}>
-                        {courseType.help}
-                      </Text>
                     </TouchableOpacity>
                   ))}
                 </View>
 
                 <View style={[detectedCourseBox, { backgroundColor: theme.input, borderColor: theme.border }]}>
-                  <Text style={[fieldLabel, { color: theme.muted, marginBottom: 4 }]}>Detected Course</Text>
+                  <Text style={[fieldLabel, { color: theme.muted, marginTop: 0, marginBottom: 4 }]}>Detected Course</Text>
                   <Text style={[detectedCourseText, { color: theme.text }]}>
                     Course code {inferredGnduCourseCode}
                   </Text>
@@ -835,12 +837,23 @@ export default function GPATracker() {
 
 function InfoCard({ title, value, color }: { title: string; value: string; color: string }) {
   const theme = useAppTheme();
+  const compactValue = value.length > 6;
 
   return (
     <View style={[infoCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
       <Text style={[infoTitle, { color: theme.muted }]}>{title}</Text>
 
-      <Text numberOfLines={1} style={{ color, fontSize: 20, fontWeight: "900", marginTop: 10 }}>
+      <Text
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.72}
+        style={{
+          color,
+          fontSize: compactValue ? 17 : 20,
+          fontWeight: "900",
+          marginTop: 10,
+        }}
+      >
         {value}
       </Text>
     </View>
@@ -932,8 +945,9 @@ const semesterSelector = {
 
 const infoCard = {
   flex: 1,
+  minWidth: 0,
   backgroundColor: "#0f172a",
-  padding: 16,
+  padding: 14,
   borderRadius: 24,
   borderWidth: 1,
   borderColor: "#1e293b",
@@ -997,8 +1011,8 @@ const gradeBox = {
 
 const formCard = {
   backgroundColor: "#0f172a",
-  padding: 20,
-  borderRadius: 28,
+  padding: 18,
+  borderRadius: 24,
   borderWidth: 1,
   borderColor: "#1e293b",
 };
@@ -1006,30 +1020,30 @@ const formCard = {
 const input = {
   backgroundColor: "#020617",
   color: "white",
-  padding: 16,
+  padding: 14,
   borderRadius: 18,
-  marginBottom: 14,
+  marginBottom: 12,
   fontSize: 16,
   borderWidth: 1,
   borderColor: "#334155",
 };
 
 const gnduGuideBox = {
-  padding: 16,
+  padding: 14,
   borderRadius: 18,
   borderWidth: 1,
-  marginBottom: 16,
+  marginBottom: 14,
 };
 
 const gnduGuideTitle = {
-  fontSize: 16,
+  fontSize: 15,
   fontWeight: "900" as const,
-  marginBottom: 6,
+  marginBottom: 4,
 };
 
 const gnduGuideText = {
-  fontSize: 14,
-  lineHeight: 20,
+  fontSize: 13,
+  lineHeight: 18,
 };
 
 const fieldLabel = {
@@ -1042,26 +1056,26 @@ const fieldLabel = {
 const optionRow = {
   flexDirection: "row" as const,
   flexWrap: "wrap" as const,
-  gap: 10,
-  marginBottom: 14,
+  gap: 8,
+  marginBottom: 12,
 };
 
 const optionChip = {
-  minWidth: 118,
-  flexGrow: 1,
-  paddingHorizontal: 14,
-  paddingVertical: 12,
-  borderRadius: 18,
+  width: "48%" as const,
+  minHeight: 48,
+  justifyContent: "center" as const,
+  paddingHorizontal: 12,
+  paddingVertical: 10,
+  borderRadius: 16,
   borderWidth: 1,
 };
 
 const semesterChip = {
-  width: "30.6%" as const,
-  minWidth: 84,
+  width: "31%" as const,
   alignItems: "center" as const,
-  paddingHorizontal: 10,
-  paddingVertical: 12,
-  borderRadius: 18,
+  paddingHorizontal: 8,
+  paddingVertical: 10,
+  borderRadius: 16,
   borderWidth: 1,
 };
 
@@ -1070,17 +1084,11 @@ const optionChipText = {
   fontWeight: "900" as const,
 };
 
-const optionChipHelp = {
-  fontSize: 11,
-  fontWeight: "700" as const,
-  marginTop: 3,
-};
-
 const detectedCourseBox = {
-  padding: 14,
+  padding: 12,
   borderRadius: 18,
   borderWidth: 1,
-  marginBottom: 14,
+  marginBottom: 12,
 };
 
 const detectedCourseText = {
