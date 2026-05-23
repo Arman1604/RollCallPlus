@@ -129,9 +129,11 @@ export default function GPATracker() {
   const manualStorageKey = getManualStorageKey(student);
   const gnduStorageKey = getGnduStorageKey(student);
   const gnduRollNumber = getGnduRollNumber(student);
+  const gnduRollStorageKey = `${gnduStorageKey}:roll`;
 
   const [semester, setSemester] = useState("");
   const [sgpaInput, setSgpaInput] = useState("");
+  const [gnduRollInput, setGnduRollInput] = useState(gnduRollNumber);
   const [manualData, setManualData] = useState<ManualSGPA[]>([]);
   const [gnduResults, setGnduResults] = useState<ResultData[]>([]);
   const [gnduLoading, setGnduLoading] = useState(false);
@@ -210,9 +212,24 @@ export default function GPATracker() {
     loadGnduResults();
   }, [loadGnduResults]);
 
+  const loadGnduRollInput = useCallback(async () => {
+    try {
+      const saved = await AsyncStorage.getItem(gnduRollStorageKey);
+      setGnduRollInput(saved || gnduRollNumber);
+    } catch (error) {
+      console.log("GNDU roll load error:", error);
+    }
+  }, [gnduRollNumber, gnduRollStorageKey]);
+
+  useEffect(() => {
+    loadGnduRollInput();
+  }, [loadGnduRollInput]);
+
   async function fetchGnduResult() {
-    if (!gnduRollNumber) {
-      Alert.alert("GNDU Roll Number Missing", "University roll number is not available in your profile.");
+    const rollToFetch = gnduRollInput.trim();
+
+    if (!rollToFetch) {
+      Alert.alert("GNDU Roll Number Missing", "Enter your GNDU university/exam roll number first.");
       return;
     }
 
@@ -225,7 +242,7 @@ export default function GPATracker() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          rollNumber: gnduRollNumber,
+          rollNumber: rollToFetch,
         }),
       });
       const data = await response.json();
@@ -234,6 +251,10 @@ export default function GPATracker() {
         Alert.alert(
           "GNDU Result Not Found",
           `${data.message || "Result is not available yet."}${
+            data.diagnostics
+              ? `\n\nChecked: ${data.diagnostics.sessionsChecked} sessions, ${data.diagnostics.lawCoursesFound} law courses, ${data.diagnostics.semestersChecked} semesters.`
+              : ""
+          }${
             data.requestId ? `\n\nRequest ID: ${data.requestId}` : ""
           }`
         );
@@ -242,6 +263,7 @@ export default function GPATracker() {
 
       const fetchedResults = data.results || [data.current].filter(Boolean);
       setGnduResults(fetchedResults);
+      await AsyncStorage.setItem(gnduRollStorageKey, rollToFetch);
       await AsyncStorage.setItem(gnduStorageKey, JSON.stringify(fetchedResults));
     } catch (error) {
       console.log("GNDU result fetch error:", error);
@@ -559,9 +581,17 @@ export default function GPATracker() {
 
               <View style={[formCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                 <Text style={[emptyText, { color: theme.muted, textAlign: "left", marginBottom: 12 }]}>
-                  Fetch Law semester result from GNDU using university roll number{" "}
-                  {gnduRollNumber || "from your profile"}.
+                  Enter your GNDU university/exam roll number exactly as printed on the result portal.
                 </Text>
+
+                <TextInput
+                  placeholder="GNDU roll number"
+                  placeholderTextColor={theme.subtle}
+                  value={gnduRollInput}
+                  onChangeText={setGnduRollInput}
+                  keyboardType="number-pad"
+                  style={[input, { backgroundColor: theme.input, color: theme.text, borderColor: theme.borderStrong }]}
+                />
 
                 <TouchableOpacity
                   onPress={fetchGnduResult}

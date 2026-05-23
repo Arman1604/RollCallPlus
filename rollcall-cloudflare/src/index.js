@@ -533,10 +533,16 @@ async function scrapeGnduResult(payload) {
   const months = payload.month ? [payload.month] : ["12", "5", "4", "9"];
   const courseTypes = payload.courseType ? [payload.courseType] : ["C-", "P", "A", "C"];
   const collected = [];
+  const diagnostics = {
+    sessionsChecked: 0,
+    lawCoursesFound: 0,
+    semestersChecked: 0,
+  };
 
   for (const year of years) {
     for (const month of months) {
       for (const courseType of courseTypes) {
+        diagnostics.sessionsChecked += 1;
         let html = await fetch(GNDU_RESULT_URL, {
           headers: { "User-Agent": "RollCallPlus-Cloudflare-GNDU" },
         }).then((response) => response.text());
@@ -559,8 +565,12 @@ async function scrapeGnduResult(payload) {
 
         const coursePage = cheerio.load(html);
         const lawCourses = getSelectOptions(coursePage, "#DrpDwnCMaster").filter(
-          (item) => /law|ll\.?b|b\.?\s*a|bba|b\.?\s*com/i.test(item.text)
+          (item) =>
+            /law|ll\.?\s*b|b\.?\s*a\.?\s*ll\.?\s*b|bba\s*ll\.?\s*b|b\.?\s*com\s*ll\.?\s*b/i.test(
+              item.text
+            )
         );
+        diagnostics.lawCoursesFound += lawCourses.length;
 
         for (const course of lawCourses) {
           let semesterHtml = await postGnduStep(html, {
@@ -574,6 +584,7 @@ async function scrapeGnduResult(payload) {
           const semesters = getSelectOptions(semesterPage, "#DrpDwnCdetail");
 
           for (const semester of semesters) {
+            diagnostics.semestersChecked += 1;
             const readyHtml = await postGnduStep(semesterHtml, {
               __EVENTTARGET: "DrpDwnCdetail",
               DrpDwnYear: year,
@@ -614,6 +625,7 @@ async function scrapeGnduResult(payload) {
     return {
       available: false,
       message: "GNDU result not found for this roll number yet",
+      diagnostics,
       results: [],
     };
   }
@@ -622,6 +634,7 @@ async function scrapeGnduResult(payload) {
     available: true,
     current: collected[0],
     results: collected,
+    diagnostics,
   };
 }
 
