@@ -106,7 +106,9 @@ function getCompactSemesterTitle(value?: string) {
 const GNDU_YEAR_OPTIONS = ["2026", "2025", "2024", "2023"];
 
 const GNDU_MONTH_OPTIONS = [
+  { label: "April", value: "4", help: "April session" },
   { label: "May", value: "5", help: "May session" },
+  { label: "September", value: "9", help: "September session" },
   { label: "December", value: "12", help: "December session" },
 ];
 
