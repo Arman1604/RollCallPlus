@@ -103,6 +103,16 @@ function getGnduRollNumber(student: any) {
   ).trim();
 }
 
+function getCompactSemesterTitle(value?: string) {
+  const title = String(value || "Semester")
+    .replace(/\s*\(FIVE YEARS INTEGRATED COURSE\)/i, "")
+    .replace(/,\s*/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return title || "Semester";
+}
+
 export default function GPATracker() {
   const theme = useAppTheme();
   const resultFromStore = useAppStore((state) => state.result) as ResultData | null;
@@ -403,7 +413,7 @@ export default function GPATracker() {
             <Text style={[cardLabel, { color: theme.muted }]}>
               {portalAvailable
                 ? hasRealSgpa
-                  ? `${activeResult?.semester || "Current"} SGPA`
+                  ? `${getCompactSemesterTitle(activeResult?.semester || "Current")} SGPA`
                   : "Portal Result"
                 : lawStudent
                 ? latestManualSemester
@@ -483,13 +493,17 @@ export default function GPATracker() {
 
               {combinedSemesters.map((item, index) => (
                 <View key={item.semester + index} style={[subjectCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                  <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                    <View>
-                      <Text style={[subjectName, { color: theme.text }]}>{item.semester}</Text>
+                  <View style={semesterResultRow}>
+                    <View style={semesterResultInfo}>
+                      <Text numberOfLines={3} style={[semesterResultTitle, { color: theme.text }]}>
+                        {getCompactSemesterTitle(item.semester)}
+                      </Text>
                       <Text style={[mutedText, { color: theme.subtle }]}>{item.source}</Text>
                     </View>
 
-                    <Text style={manualScore}>{item.sgpa}</Text>
+                    <View style={[semesterScoreBox, { backgroundColor: theme.surfaceAlt, borderColor: theme.border }]}>
+                      <Text style={semesterScoreText}>{item.sgpa}</Text>
+                    </View>
                   </View>
                 </View>
               ))}
@@ -567,8 +581,8 @@ export default function GPATracker() {
 
                         <Text style={[mutedText, { color: theme.subtle }]}>
                           {isGnduResult
-                            ? `${subject.code} • Marks: ${subject.grade}/${subject.credits}`
-                            : `${subject.code} • Credits: ${subject.credits}`}
+                            ? `${subject.code} - Marks: ${subject.grade}/${subject.credits}`
+                            : `${subject.code} - Credits: ${subject.credits}`}
                         </Text>
                       </View>
 
@@ -765,18 +779,20 @@ export default function GPATracker() {
                           gap: 14,
                         }}
                       >
-                        <View style={{ flex: 1 }}>
-                          <Text style={{ color: theme.text, fontSize: 18, fontWeight: "900" }}>
-                            {item.semester || `Semester ${index + 1}`}
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text numberOfLines={3} style={{ color: theme.text, fontSize: 18, lineHeight: 24, fontWeight: "900" }}>
+                            {getCompactSemesterTitle(item.semester || `Semester ${index + 1}`)}
                           </Text>
 
                           <Text style={{ color: theme.muted, marginTop: 6 }}>
-                            {item.resultStatus || "Pending"} • Credits:{" "}
-                            {item.creditsEarned || "0"} • {subjects.length} subjects
+                            {item.resultStatus || "Pending"} - Credits:{" "}
+                            {item.creditsEarned || "0"} - {subjects.length} subjects
                           </Text>
                         </View>
 
-                        <Text style={manualScore}>{item.sgpa || "N/A"}</Text>
+                        <View style={[semesterScoreBox, { backgroundColor: theme.surfaceAlt, borderColor: theme.border }]}>
+                          <Text style={semesterScoreText}>{item.sgpa || "N/A"}</Text>
+                        </View>
                       </View>
 
                       {expanded &&
@@ -799,7 +815,7 @@ export default function GPATracker() {
                               </Text>
 
                               <Text style={{ color: theme.subtle, marginTop: 4 }}>
-                                {subject.code} • Credits: {subject.credits}
+                                {subject.code} - Credits: {subject.credits}
                               </Text>
                             </View>
 
@@ -954,6 +970,26 @@ const subjectName = {
   fontWeight: "900" as const,
 };
 
+const semesterResultRow = {
+  flexDirection: "row" as const,
+  alignItems: "flex-start" as const,
+  justifyContent: "space-between" as const,
+  gap: 14,
+};
+
+const semesterResultInfo = {
+  flex: 1,
+  minWidth: 0,
+  paddingRight: 6,
+};
+
+const semesterResultTitle = {
+  color: "white",
+  fontSize: 20,
+  lineHeight: 26,
+  fontWeight: "900" as const,
+};
+
 const mutedText = {
   color: "#64748b",
   marginTop: 8,
@@ -1004,6 +1040,24 @@ const buttonText = {
 const manualScore = {
   color: "#22c55e",
   fontSize: 26,
+  fontWeight: "900" as const,
+};
+
+const semesterScoreBox = {
+  minWidth: 72,
+  maxWidth: 92,
+  alignItems: "center" as const,
+  justifyContent: "center" as const,
+  paddingHorizontal: 12,
+  paddingVertical: 10,
+  borderRadius: 18,
+  borderWidth: 1,
+  borderColor: "#1e293b",
+};
+
+const semesterScoreText = {
+  color: "#22c55e",
+  fontSize: 22,
   fontWeight: "900" as const,
 };
 
