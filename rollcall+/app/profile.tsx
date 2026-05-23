@@ -2,7 +2,7 @@ import { Stack, router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { Ionicons } from "@expo/vector-icons";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
   Alert,
@@ -43,6 +43,15 @@ type SavedAccount = {
 type SupportCategory = "Login" | "Attendance" | "GPA/GNDU" | "Account" | "App Bug";
 type SupportPriority = "Normal" | "Urgent";
 
+type SupportTicket = {
+  id: string;
+  status: "open" | "shared";
+  category: SupportCategory;
+  priority: SupportPriority;
+  message: string;
+  createdAt: string;
+};
+
 const SUPPORT_CATEGORIES: SupportCategory[] = [
   "Login",
   "Attendance",
@@ -81,6 +90,11 @@ function isAvailable(value?: string) {
   );
 }
 
+function getSupportTicketsKey(rollNumber?: string) {
+  const cleanRoll = String(rollNumber || "").trim();
+  return cleanRoll ? `supportTickets:${cleanRoll}` : "supportTickets";
+}
+
 export default function Profile() {
   const student = useAppStore((state) => state.student);
   const subjects = useAppStore((state) => state.attendance) as Subject[];
@@ -97,6 +111,7 @@ export default function Profile() {
   const [supportContact, setSupportContact] = useState("");
   const [supportMessage, setSupportMessage] = useState("");
   const [submittingSupport, setSubmittingSupport] = useState(false);
+  const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
 
   const totalAttended = subjects.reduce((sum, s) => sum + (s.attended || 0), 0);
   const totalMissed = subjects.reduce((sum, s) => sum + (s.missed || 0), 0);
@@ -110,6 +125,30 @@ export default function Profile() {
     Constants.expoConfig?.ios?.buildNumber ||
     "1";
   const appLabel = `v${appVersion} (${appBuild})`;
+  const supportTicketsKey = getSupportTicketsKey(student?.rollNumber);
+
+  const loadSupportTickets = useCallback(async () => {
+    try {
+      const saved = await AsyncStorage.getItem(supportTicketsKey);
+      setSupportTickets(saved ? JSON.parse(saved) : []);
+    } catch (error) {
+      console.log("Support ticket history load error:", error);
+    }
+  }, [supportTicketsKey]);
+
+  useEffect(() => {
+    loadSupportTickets();
+  }, [loadSupportTickets]);
+
+  async function saveSupportTicket(ticket: SupportTicket) {
+    const updated = [
+      ticket,
+      ...supportTickets.filter((item) => item.id !== ticket.id),
+    ].slice(0, 10);
+
+    setSupportTickets(updated);
+    await AsyncStorage.setItem(supportTicketsKey, JSON.stringify(updated));
+  }
 
   async function switchAccount() {
     try {
@@ -248,6 +287,15 @@ export default function Profile() {
         throw new Error(data?.message || "Support ticket submit failed");
       }
 
+      await saveSupportTicket({
+        id: data.ticketId,
+        status: "open",
+        category: supportCategory,
+        priority: supportPriority,
+        message: supportMessage.trim(),
+        createdAt: new Date().toISOString(),
+      });
+
       setShowSupportCenter(false);
       setSupportMessage("");
       Alert.alert(
@@ -275,6 +323,14 @@ export default function Profile() {
           "Issue:",
           supportMessage.trim(),
         ].join("\n"),
+      });
+      await saveSupportTicket({
+        id: fallbackTicketId,
+        status: "shared",
+        category: supportCategory,
+        priority: supportPriority,
+        message: supportMessage.trim(),
+        createdAt: new Date().toISOString(),
       });
       setShowSupportCenter(false);
       setSupportMessage("");
@@ -426,6 +482,59 @@ export default function Profile() {
           </TouchableOpacity>
           <InfoCard label="Login" value="Saved securely on device" />
           <InfoCard label="App Version" value={appLabel} />
+
+          <Text style={[sectionTitle, { color: theme.text }]}>My Support Tickets</Text>
+
+          {supportTickets.length === 0 ? (
+            <View style={[emptySupportCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+              <Text style={[emptySupportText, { color: theme.muted }]}>
+                No support tickets yet.
+              </Text>
+            </View>
+          ) : (
+            supportTickets.map((ticket) => (
+              <View
+                key={ticket.id}
+                style={[supportTicketCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
+              >
+                <View style={supportTicketHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[supportTicketId, { color: theme.text }]}>
+                      {ticket.id}
+                    </Text>
+                    <Text style={[supportTicketMeta, { color: theme.subtle }]}>
+                      {ticket.category} - {ticket.priority}
+                    </Text>
+                  </View>
+
+                  <View
+                    style={[
+                      supportStatusPill,
+                      {
+                        backgroundColor:
+                          ticket.status === "open" ? "#22c55e22" : "#f59e0b22",
+                        borderColor:
+                          ticket.status === "open" ? "#22c55e" : "#f59e0b",
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        supportStatusText,
+                        { color: ticket.status === "open" ? "#22c55e" : "#f59e0b" },
+                      ]}
+                    >
+                      {ticket.status === "open" ? "Open" : "Shared"}
+                    </Text>
+                  </View>
+                </View>
+
+                <Text numberOfLines={2} style={[supportTicketMessage, { color: theme.muted }]}>
+                  {ticket.message}
+                </Text>
+              </View>
+            ))
+          )}
 
           <View style={actionPanel}>
             <ActionButton
@@ -953,6 +1062,59 @@ const supportSubmitText = {
   color: "#ffffff",
   fontSize: 16,
   fontWeight: "900" as const,
+};
+
+const emptySupportCard = {
+  padding: 18,
+  borderRadius: 24,
+  borderWidth: 1,
+  borderColor: "#1e293b",
+};
+
+const emptySupportText = {
+  textAlign: "center" as const,
+  fontWeight: "700" as const,
+};
+
+const supportTicketCard = {
+  padding: 16,
+  borderRadius: 24,
+  borderWidth: 1,
+  borderColor: "#1e293b",
+  marginBottom: 12,
+};
+
+const supportTicketHeader = {
+  flexDirection: "row" as const,
+  alignItems: "center" as const,
+  gap: 12,
+};
+
+const supportTicketId = {
+  fontSize: 16,
+  fontWeight: "900" as const,
+};
+
+const supportTicketMeta = {
+  marginTop: 5,
+  fontWeight: "700" as const,
+};
+
+const supportStatusPill = {
+  paddingHorizontal: 10,
+  paddingVertical: 7,
+  borderRadius: 999,
+  borderWidth: 1,
+};
+
+const supportStatusText = {
+  fontWeight: "900" as const,
+  fontSize: 12,
+};
+
+const supportTicketMessage = {
+  marginTop: 10,
+  lineHeight: 20,
 };
 
 const accountItem = {
