@@ -52,6 +52,13 @@ function getTicketStatusColor(status: SupportTicket["status"]) {
   return "#22c55e";
 }
 
+function getTicketStatusIcon(status: SupportTicket["status"]) {
+  if (status === "closed") return "checkmark-circle";
+  if (status === "replied") return "chatbubble-ellipses";
+  if (status === "failed" || status === "local") return "alert-circle";
+  return "time";
+}
+
 function formatDate(value?: string) {
   if (!value) return "Not updated";
 
@@ -248,6 +255,11 @@ export default function SupportTickets() {
                         },
                       ]}
                     >
+                      <Ionicons
+                        name={getTicketStatusIcon(ticket.status)}
+                        size={13}
+                        color={statusColor}
+                      />
                       <Text style={[statusText, { color: statusColor }]}>
                         {getTicketStatusLabel(ticket.status)}
                       </Text>
@@ -270,7 +282,11 @@ export default function SupportTickets() {
                           { color: ticket.reply?.message ? theme.primary : theme.subtle },
                         ]}
                       >
-                        {ticket.reply?.message ? "Support Reply" : "Waiting for reply"}
+                        {ticket.reply?.message
+                          ? ticket.status === "closed"
+                            ? "Support Reply - Closed"
+                            : "Support Reply"
+                          : "Waiting for reply"}
                       </Text>
                     </View>
 
@@ -280,9 +296,14 @@ export default function SupportTickets() {
                   </View>
 
                   <View style={ticketFooter}>
-                    <Text style={[updatedText, { color: theme.subtle }]}>
-                      Updated {formatDate(ticket.updatedAt || ticket.createdAt)}
-                    </Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[updatedLabel, { color: theme.subtle }]}>
+                        Last updated
+                      </Text>
+                      <Text style={[updatedText, { color: theme.text }]}>
+                        {formatDate(ticket.updatedAt || ticket.createdAt)}
+                      </Text>
+                    </View>
 
                     <TouchableOpacity
                       activeOpacity={0.86}
@@ -410,6 +431,9 @@ const statusPill = {
   borderRadius: 999,
   paddingHorizontal: 10,
   paddingVertical: 7,
+  flexDirection: "row" as const,
+  alignItems: "center" as const,
+  gap: 5,
 };
 
 const statusText = {
@@ -462,10 +486,15 @@ const ticketFooter = {
   marginTop: 14,
 };
 
-const updatedText = {
-  flex: 1,
+const updatedLabel = {
   fontSize: 12,
   fontWeight: "800" as const,
+};
+
+const updatedText = {
+  fontSize: 13,
+  fontWeight: "900" as const,
+  marginTop: 2,
 };
 
 const deleteButton = {

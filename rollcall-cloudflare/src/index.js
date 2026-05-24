@@ -350,6 +350,18 @@ function validateInstantAlertsPayload(body, requestId) {
   };
 }
 
+function validateTestNotificationPayload(body, requestId) {
+  const rollNumber = sanitizeText(body.rollNumber, 40);
+
+  if (!rollNumber) {
+    return {
+      response: json({ message: "Roll number is required" }, 400, {}, requestId),
+    };
+  }
+
+  return { payload: { rollNumber } };
+}
+
 function normalizeBaseUrl(value) {
   return String(value || "").replace(/\/+$/, "");
 }
@@ -2041,6 +2053,36 @@ async function handleInstantAlerts(request, env, requestId) {
   return json({ status: "success", enabled: true }, 200, {}, requestId);
 }
 
+async function handleTestNotification(request, env, requestId) {
+  const bodyResult = await readJsonBody(request, requestId, MAX_SUPPORT_BODY_BYTES);
+  if (bodyResult.response) return bodyResult.response;
+
+  const validation = validateTestNotificationPayload(bodyResult.body, requestId);
+  if (validation.response) return validation.response;
+
+  const sent = await sendExpoPush(env, validation.payload.rollNumber, {
+    title: "RollCall+ notifications are ready",
+    body: "You will receive support replies and enabled academic alerts here.",
+    data: { type: "test_notification" },
+  });
+
+  if (!sent) {
+    return json(
+      { message: "No push token found. Open the app once and allow notifications." },
+      404,
+      {},
+      requestId
+    );
+  }
+
+  return json(
+    { status: "success", message: "Test notification sent" },
+    200,
+    {},
+    requestId
+  );
+}
+
 async function processInstantAlerts(env) {
   if (!env.SUPPORT_TICKETS) return;
 
@@ -2688,6 +2730,14 @@ export default {
         }
 
         return handleInstantAlerts(request, env, requestId);
+      }
+
+      if (url.pathname === "/test-notification") {
+        if (request.method !== "POST") {
+          return json({ message: "Method not allowed" }, 405, {}, requestId);
+        }
+
+        return handleTestNotification(request, env, requestId);
       }
 
       if (url.pathname === "/support-tickets") {

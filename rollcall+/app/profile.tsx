@@ -26,7 +26,9 @@ import {
   API_BASE_URL,
   HEALTH_URL,
   INSTANT_ALERTS_URL,
+  PUSH_TOKEN_URL,
   SUPPORT_TICKET_URL,
+  TEST_NOTIFICATION_URL,
 } from "../utils/api";
 import { registerForPushNotificationsAsync } from "../utils/notifications";
 
@@ -128,6 +130,7 @@ export default function Profile() {
   const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
   const [instantAlertsEnabled, setInstantAlertsEnabled] = useState(false);
   const [savingInstantAlerts, setSavingInstantAlerts] = useState(false);
+  const [testingNotification, setTestingNotification] = useState(false);
 
   const totalAttended = subjects.reduce((sum, s) => sum + (s.attended || 0), 0);
   const totalMissed = subjects.reduce((sum, s) => sum + (s.missed || 0), 0);
@@ -271,7 +274,7 @@ export default function Profile() {
     if (enabled) {
       Alert.alert(
         "Enable Instant Alerts",
-        "RollCall+ will securely store your portal login on Cloudflare so it can check attendance/results and send alerts even when the app is closed.",
+        "Optional server-side alerts require RollCall+ to securely store your portal credentials on Cloudflare. They are used only to check attendance/results and send notifications while the app is closed.",
         [
           { text: "Cancel", style: "cancel" },
           {
@@ -325,6 +328,56 @@ export default function Profile() {
       );
     } finally {
       setSavingInstantAlerts(false);
+    }
+  }
+
+  async function sendTestNotification() {
+    if (!student?.rollNumber) return;
+
+    try {
+      setTestingNotification(true);
+      const token = await registerForPushNotificationsAsync();
+
+      if (!token) {
+        Alert.alert("Test Notification", "Allow notifications on this phone first.");
+        return;
+      }
+
+      await fetch(PUSH_TOKEN_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          rollNumber: student.rollNumber,
+          token,
+          platform: "expo",
+        }),
+      });
+
+      const response = await fetch(TEST_NOTIFICATION_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          rollNumber: student.rollNumber,
+        }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.message || "Could not send test notification.");
+      }
+
+      Alert.alert("Test Notification", "Sent. Check your notification shade.");
+    } catch (error) {
+      Alert.alert(
+        "Test Notification",
+        String(error instanceof Error ? error.message : "Could not send test notification.")
+      );
+    } finally {
+      setTestingNotification(false);
     }
   }
 
@@ -556,7 +609,7 @@ export default function Profile() {
                 {instantAlertsEnabled ? "Server push enabled" : "Tap to enable real-time alerts"}
               </Text>
               <Text style={[actionSubtitle, { marginTop: 4 }]}>
-                Attendance/result alerts even when the app is closed
+                Optional server checks for attendance/result changes
               </Text>
             </View>
 
@@ -576,6 +629,29 @@ export default function Profile() {
                 size={22}
                 color={instantAlertsEnabled ? "#22c55e" : theme.primary}
               />
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            activeOpacity={0.86}
+            disabled={testingNotification}
+            onPress={sendTestNotification}
+            style={[
+              testNotificationButton,
+              {
+                backgroundColor: theme.surface,
+                borderColor: theme.border,
+                opacity: testingNotification ? 0.65 : 1,
+              },
+            ]}
+          >
+            <Ionicons name="paper-plane-outline" size={20} color={theme.info} />
+            <View style={{ flex: 1 }}>
+              <Text style={[testNotificationTitle, { color: theme.text }]}>
+                Send Test Notification
+              </Text>
+              <Text style={[actionSubtitle, { marginTop: 3 }]}>
+                Confirm this phone can receive RollCall+ alerts
+              </Text>
             </View>
           </TouchableOpacity>
           <InfoCard label="Login" value="Saved securely on device" />
@@ -984,6 +1060,21 @@ const themeSwitch = {
   borderRadius: 18,
   justifyContent: "center" as const,
   alignItems: "center" as const,
+};
+
+const testNotificationButton = {
+  padding: 16,
+  borderRadius: 22,
+  marginBottom: 12,
+  borderWidth: 1,
+  flexDirection: "row" as const,
+  alignItems: "center" as const,
+  gap: 12,
+};
+
+const testNotificationTitle = {
+  fontSize: 15,
+  fontWeight: "900" as const,
 };
 
 const actionButton = {
