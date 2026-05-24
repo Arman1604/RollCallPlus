@@ -32,6 +32,7 @@ export default function Settings() {
     Constants.expoConfig?.ios?.buildNumber ||
     "1";
   const appLabel = `v${appVersion} (${appBuild})`;
+  const themeLabel = themeMode === "dark" ? "Dark Mode" : "Light Mode";
 
   useEffect(() => {
     AsyncStorage.getItem(`instantAlerts:${student?.rollNumber || ""}`).then((value) => {
@@ -137,17 +138,29 @@ export default function Settings() {
             </TouchableOpacity>
           </View>
 
-          <Text style={[eyebrow, { color: theme.primary }]}>PREFERENCES</Text>
-          <Text style={[title, { color: theme.text }]}>Settings</Text>
-          <Text style={[subtitle, { color: theme.muted }]}>
-            Manage alerts, display, portal sync, and account safety.
-          </Text>
+          <View style={[heroCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <View style={heroTopRow}>
+              <View style={[heroIcon, { backgroundColor: theme.primarySoft }]}>
+                <Ionicons name="settings-outline" size={26} color={theme.primary} />
+              </View>
+
+              <View style={[versionBadge, { backgroundColor: theme.input, borderColor: theme.border }]}>
+                <Text style={[versionBadgeText, { color: theme.text }]}>{appLabel}</Text>
+              </View>
+            </View>
+
+            <Text style={[eyebrow, { color: theme.primary }]}>PREFERENCES</Text>
+            <Text style={[title, { color: theme.text }]}>Settings</Text>
+            <Text style={[subtitle, { color: theme.muted }]}>
+              A cleaner home for appearance, alerts, and app details.
+            </Text>
+          </View>
 
           <Text style={[sectionTitle, { color: theme.text }]}>Experience</Text>
           <SettingRow
             icon={themeMode === "dark" ? "moon" : "sunny"}
             title="Theme"
-            subtitle={themeMode === "dark" ? "Dark Mode" : "Light Mode"}
+            subtitle={themeLabel}
             color={theme.primary}
             onPress={toggleTheme}
             rightLabel={themeMode === "dark" ? "Dark" : "Light"}
@@ -159,8 +172,8 @@ export default function Settings() {
             title="Instant Alerts"
             subtitle={
               instantAlertsEnabled
-                ? "Server push is enabled for attendance and results"
-                : "Optional server checks for attendance/result changes"
+                ? "Attendance and result alerts are enabled"
+                : "Optional alerts for attendance/result changes"
             }
             color={instantAlertsEnabled ? theme.success : theme.primary}
             disabled={savingInstantAlerts}
@@ -189,7 +202,7 @@ export default function Settings() {
           <SettingInfo label="App Version" value={appLabel} />
           <SettingInfo
             label="Appearance"
-            value={themeMode === "dark" ? "Dark Mode" : "Light Mode"}
+            value={themeLabel}
           />
         </ScrollView>
 
@@ -276,7 +289,7 @@ const content = {
 const header = {
   flexDirection: "row" as const,
   alignItems: "center" as const,
-  marginBottom: 26,
+  marginBottom: 18,
 };
 
 const iconButton = {
@@ -286,6 +299,45 @@ const iconButton = {
   borderWidth: 1,
   alignItems: "center" as const,
   justifyContent: "center" as const,
+};
+
+const heroCard = {
+  borderRadius: 30,
+  borderWidth: 1,
+  padding: 20,
+  marginBottom: 28,
+  shadowColor: "#7c3aed",
+  shadowOpacity: 0.12,
+  shadowRadius: 20,
+  shadowOffset: { width: 0, height: 12 },
+  elevation: 4,
+};
+
+const heroTopRow = {
+  flexDirection: "row" as const,
+  alignItems: "center" as const,
+  justifyContent: "space-between" as const,
+  marginBottom: 18,
+};
+
+const heroIcon = {
+  width: 54,
+  height: 54,
+  borderRadius: 20,
+  alignItems: "center" as const,
+  justifyContent: "center" as const,
+};
+
+const versionBadge = {
+  borderWidth: 1,
+  borderRadius: 999,
+  paddingHorizontal: 12,
+  paddingVertical: 8,
+};
+
+const versionBadgeText = {
+  fontSize: 12,
+  fontWeight: "900" as const,
 };
 
 const eyebrow = {
@@ -305,7 +357,6 @@ const subtitle = {
   fontSize: 18,
   lineHeight: 26,
   marginTop: 10,
-  marginBottom: 28,
 };
 
 const sectionTitle = {

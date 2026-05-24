@@ -325,7 +325,23 @@ export default function Profile() {
 
       <ScrollView style={{ flex: 1, backgroundColor: theme.background }}>
         <View style={{ padding: 20, paddingTop: 68, paddingBottom: 130 }}>
-          <Text style={[sectionTitle, { color: theme.text }]}>Student Profile</Text>
+          <Text style={[eyebrow, { color: theme.primary }]}>ACCOUNT CENTER</Text>
+          <View style={profileHeaderRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={[profileTitle, { color: theme.text }]}>Me</Text>
+              <Text style={[profileSubtitle, { color: theme.muted }]}>
+                Profile, attendance, support, and account controls.
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              activeOpacity={0.86}
+              onPress={() => router.push("/settings")}
+              style={[profileHeaderButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
+            >
+              <Ionicons name="settings-outline" size={22} color={theme.text} />
+            </TouchableOpacity>
+          </View>
 
           <View style={[profileCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <View style={[avatarBox, { backgroundColor: theme.input, borderColor: theme.borderStrong }]}>
@@ -346,25 +362,33 @@ export default function Profile() {
               Roll No: {student?.rollNumber || "Not available"}
             </Text>
 
-            <View
-              style={{
-                backgroundColor: overall >= 75 ? "#22c55e22" : "#ef444422",
-                paddingHorizontal: 14,
-                paddingVertical: 9,
-                borderRadius: 999,
-                marginTop: 16,
-                borderWidth: 1,
-                borderColor: overall >= 75 ? "#22c55e" : "#ef4444",
-              }}
-            >
-              <Text
+            <View style={profilePillRow}>
+              <View
                 style={{
-                  color: overall >= 75 ? "#22c55e" : "#ef4444",
-                  fontWeight: "900",
+                  backgroundColor: overall >= 75 ? "#22c55e22" : "#ef444422",
+                  paddingHorizontal: 14,
+                  paddingVertical: 9,
+                  borderRadius: 999,
+                  borderWidth: 1,
+                  borderColor: overall >= 75 ? "#22c55e" : "#ef4444",
                 }}
               >
-                {overall >= 75 ? "Safe Attendance" : "Needs Attention"}
-              </Text>
+                <Text
+                  style={{
+                    color: overall >= 75 ? "#22c55e" : "#ef4444",
+                    fontWeight: "900",
+                  }}
+                >
+                  {overall >= 75 ? "Safe Attendance" : "Needs Attention"}
+                </Text>
+              </View>
+
+              <View style={[profileMiniPill, { backgroundColor: theme.input, borderColor: theme.border }]}>
+                <Ionicons name="school-outline" size={15} color={theme.primary} />
+                <Text style={[profileMiniPillText, { color: theme.text }]}>
+                  {student?.semester || "Student"}
+                </Text>
+              </View>
             </View>
           </View>
 
@@ -427,7 +451,8 @@ export default function Profile() {
             />
           </View>
 
-          <View style={actionPanel}>
+          <View style={[actionPanel, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <Text style={[actionPanelTitle, { color: theme.text }]}>Quick Actions</Text>
             <ActionButton
               icon="settings-outline"
               title="Settings"
@@ -736,10 +761,15 @@ const profileCard = {
   backgroundColor: "#0f172a",
   padding: 24,
   borderRadius: 36,
-  marginTop: 26,
+  marginTop: 20,
   alignItems: "center" as const,
   borderWidth: 1,
   borderColor: "#1e293b",
+  shadowColor: "#7c3aed",
+  shadowOpacity: 0.14,
+  shadowRadius: 22,
+  shadowOffset: { width: 0, height: 12 },
+  elevation: 4,
 };
 
 const avatarBox = {
@@ -819,9 +849,78 @@ const infoValue = {
   marginTop: 8,
 };
 
+const eyebrow = {
+  fontSize: 14,
+  fontWeight: "900" as const,
+  letterSpacing: 0,
+};
+
+const profileHeaderRow = {
+  flexDirection: "row" as const,
+  alignItems: "center" as const,
+  gap: 14,
+  marginTop: 8,
+  marginBottom: 8,
+};
+
+const profileTitle = {
+  fontSize: 48,
+  fontWeight: "900" as const,
+  letterSpacing: 0,
+};
+
+const profileSubtitle = {
+  fontSize: 16,
+  lineHeight: 23,
+  marginTop: 6,
+  fontWeight: "700" as const,
+};
+
+const profileHeaderButton = {
+  width: 50,
+  height: 50,
+  borderRadius: 18,
+  borderWidth: 1,
+  alignItems: "center" as const,
+  justifyContent: "center" as const,
+};
+
+const profilePillRow = {
+  flexDirection: "row" as const,
+  flexWrap: "wrap" as const,
+  alignItems: "center" as const,
+  justifyContent: "center" as const,
+  gap: 10,
+  marginTop: 16,
+};
+
+const profileMiniPill = {
+  flexDirection: "row" as const,
+  alignItems: "center" as const,
+  gap: 6,
+  paddingHorizontal: 12,
+  paddingVertical: 9,
+  borderRadius: 999,
+  borderWidth: 1,
+};
+
+const profileMiniPillText = {
+  fontSize: 12,
+  fontWeight: "900" as const,
+};
+
 const actionPanel = {
   marginTop: 30,
+  padding: 14,
+  borderRadius: 30,
+  borderWidth: 1,
   gap: 12,
+};
+
+const actionPanelTitle = {
+  fontSize: 18,
+  fontWeight: "900" as const,
+  marginBottom: 2,
 };
 
 const actionButton = {
