@@ -2,67 +2,10 @@ import * as BackgroundFetch from "expo-background-fetch";
 import * as TaskManager from "expo-task-manager";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import { showLocalNotification } from "./notifications";
+import { notifyAcademicChanges } from "./academicNotifications";
 import { LOGIN_URL } from "./api";
 
 const BACKGROUND_TASK = "ROLLCALL_BACKGROUND_SYNC";
-
-function getOverall(attendance: any[]) {
-  let totalAttended = 0;
-  let totalLectures = 0;
-
-  attendance.forEach((subject: any) => {
-    totalAttended += subject.attended || 0;
-    totalLectures += subject.total || 0;
-  });
-
-  return totalLectures > 0
-    ? Math.round((totalAttended / totalLectures) * 100)
-    : 0;
-}
-
-function resultHasRealData(result: any) {
-  if (!result) return false;
-
-  const subjects = result.subjects || [];
-
-  return (
-    result.available === true ||
-    subjects.length > 0 ||
-    (!!result.sgpa && result.sgpa !== "0" && result.sgpa !== "Not Available")
-  );
-}
-
-function getAttendanceChanges(oldAttendance: any[], newAttendance: any[]) {
-  const oldByName = new Map(
-    (oldAttendance || []).map((subject: any) => [subject.name, subject])
-  );
-
-  return (newAttendance || [])
-    .map((subject: any) => {
-      const previous: any = oldByName.get(subject.name);
-
-      if (!previous) return null;
-
-      const oldTotal = previous.total || 0;
-      const newTotal = subject.total || 0;
-      const oldAttended = previous.attended || 0;
-      const newAttended = subject.attended || 0;
-
-      if (newTotal <= oldTotal) return null;
-
-      const totalDelta = newTotal - oldTotal;
-      const attendedDelta = newAttended - oldAttended;
-
-      return {
-        name: subject.name,
-        totalDelta,
-        attendedDelta,
-        missedDelta: Math.max(0, totalDelta - attendedDelta),
-      };
-    })
-    .filter(Boolean);
-}
 
 TaskManager.defineTask(BACKGROUND_TASK, async () => {
   try {
@@ -98,51 +41,14 @@ TaskManager.defineTask(BACKGROUND_TASK, async () => {
 
     const oldAttendance = user.attendance || [];
     const newAttendance = data.attendance || [];
-    const oldOverall = getOverall(oldAttendance);
-    const newOverall = getOverall(newAttendance);
-    const attendanceChanges = getAttendanceChanges(
-      oldAttendance,
-      newAttendance
-    );
-
     const oldResult = user.result || null;
     const newResult = data.result || null;
-    const oldResultString = JSON.stringify(oldResult);
-    const newResultString = JSON.stringify(newResult);
-    const resultChanged =
-      resultHasRealData(newResult) && oldResultString !== newResultString;
-
-    if (resultChanged) {
-      await showLocalNotification(
-        "New Result Published",
-        "Your latest GPA/result is now available."
-      );
-    }
-
-    const missedUpdates = attendanceChanges.filter(
-      (change: any) => change.missedDelta > 0
-    );
-
-    if (missedUpdates.length > 0) {
-      await showLocalNotification(
-        "Attendance Updated",
-        `${missedUpdates.length} subject${
-          missedUpdates.length === 1 ? "" : "s"
-        } recorded a missed lecture. Overall: ${newOverall}%`
-      );
-    } else if (attendanceChanges.length > 0) {
-      await showLocalNotification(
-        "Attendance Synced",
-        `New lecture data is available. Overall attendance: ${newOverall}%`
-      );
-    }
-
-    if (oldOverall >= 75 && newOverall < 75) {
-      await showLocalNotification(
-        "Attendance Dropped Below 75%",
-        `Your overall attendance is now ${newOverall}%.`
-      );
-    }
+    const academicChanges = await notifyAcademicChanges({
+      oldAttendance,
+      newAttendance,
+      oldResult,
+      newResult,
+    });
 
     await AsyncStorage.setItem(
       "rollcall_user",
@@ -155,7 +61,7 @@ TaskManager.defineTask(BACKGROUND_TASK, async () => {
       })
     );
 
-    return attendanceChanges.length > 0 || resultChanged
+    return academicChanges.attendanceChanged || academicChanges.resultChanged
       ? BackgroundFetch.BackgroundFetchResult.NewData
       : BackgroundFetch.BackgroundFetchResult.NoData;
   } catch (error) {

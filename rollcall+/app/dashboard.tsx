@@ -16,6 +16,7 @@ import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 
 import BottomTabs from "../components/BottomTabs";
 import DashboardSkeleton from "../components/DashboardSkeleton";
+import { notifyAcademicChanges } from "../utils/academicNotifications";
 import { registerBackgroundSync } from "../utils/backgroundSync";
 import { registerForPushNotificationsAsync } from "../utils/notifications";
 import { useAppStore } from "../store/useAppStore";
@@ -146,6 +147,13 @@ export default function Dashboard() {
       const newResult = data.result || result;
       const newResults = data.results || results;
       const newStudent = data.student || student;
+
+      await notifyAcademicChanges({
+        oldAttendance: subjects,
+        newAttendance,
+        oldResult: result,
+        newResult,
+      });
 
       setUserData({
         student: newStudent,
