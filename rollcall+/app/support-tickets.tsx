@@ -1,7 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import { Stack, router } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   Alert,
   RefreshControl,
@@ -138,9 +139,11 @@ export default function SupportTickets() {
     }
   }, [refreshTickets, ticketsKey]);
 
-  useEffect(() => {
-    loadTickets();
-  }, [loadTickets]);
+  useFocusEffect(
+    useCallback(() => {
+      loadTickets();
+    }, [loadTickets])
+  );
 
   function deleteTicket(ticketId: string) {
     Alert.alert(

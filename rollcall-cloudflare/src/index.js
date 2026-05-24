@@ -1646,7 +1646,6 @@ async function handleSupportTicketStatus(request, env, requestId) {
     )
   )
     .filter(Boolean)
-    .filter((ticket) => ticket.rollNumber === validation.payload.rollNumber)
     .map((ticket) => ({
       id: ticket.id,
       status: ticket.status,
