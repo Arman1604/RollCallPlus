@@ -135,6 +135,7 @@ export default function Profile() {
   const [supportMessage, setSupportMessage] = useState("");
   const [submittingSupport, setSubmittingSupport] = useState(false);
   const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
+  const [refreshingSupportTickets, setRefreshingSupportTickets] = useState(false);
 
   const totalAttended = subjects.reduce((sum, s) => sum + (s.attended || 0), 0);
   const totalMissed = subjects.reduce((sum, s) => sum + (s.missed || 0), 0);
@@ -153,7 +154,11 @@ export default function Profile() {
   const loadSupportTickets = useCallback(async () => {
     try {
       const saved = await AsyncStorage.getItem(supportTicketsKey);
-      setSupportTickets(saved ? JSON.parse(saved) : []);
+      const parsedTickets = saved ? JSON.parse(saved) : [];
+      setSupportTickets(parsedTickets);
+      if (parsedTickets.length > 0) {
+        refreshSupportTickets(parsedTickets, false);
+      }
     } catch (error) {
       console.log("Support ticket history load error:", error);
     }
@@ -173,10 +178,14 @@ export default function Profile() {
     await AsyncStorage.setItem(supportTicketsKey, JSON.stringify(updated));
   }
 
-  async function refreshSupportTickets() {
-    if (supportTickets.length === 0) return;
+  async function refreshSupportTickets(
+    ticketsToRefresh: SupportTicket[] = supportTickets,
+    showError = true
+  ) {
+    if (ticketsToRefresh.length === 0 || refreshingSupportTickets) return;
 
     try {
+      setRefreshingSupportTickets(true);
       const response = await fetch(SUPPORT_TICKET_STATUS_URL, {
         method: "POST",
         headers: {
@@ -184,7 +193,7 @@ export default function Profile() {
         },
         body: JSON.stringify({
           rollNumber: student?.rollNumber || "",
-          ticketIds: supportTickets.map((ticket) => ticket.id),
+          ticketIds: ticketsToRefresh.map((ticket) => ticket.id),
         }),
       });
       const data = await response.json();
@@ -196,7 +205,7 @@ export default function Profile() {
       const remoteById = new Map(
         data.tickets.map((ticket: SupportTicket) => [ticket.id, ticket])
       );
-      const updated = supportTickets.map((ticket) => ({
+      const updated = ticketsToRefresh.map((ticket) => ({
         ...ticket,
         ...(remoteById.get(ticket.id) || {}),
       }));
@@ -204,10 +213,14 @@ export default function Profile() {
       setSupportTickets(updated);
       await AsyncStorage.setItem(supportTicketsKey, JSON.stringify(updated));
     } catch (error) {
-      Alert.alert(
-        "Support Tickets",
-        String(error instanceof Error ? error.message : "Could not refresh tickets.")
-      );
+      if (showError) {
+        Alert.alert(
+          "Support Tickets",
+          String(error instanceof Error ? error.message : "Could not refresh tickets.")
+        );
+      }
+    } finally {
+      setRefreshingSupportTickets(false);
     }
   }
 
@@ -527,10 +540,22 @@ export default function Profile() {
             {supportTickets.length > 0 && (
               <TouchableOpacity
                 activeOpacity={0.86}
-                onPress={refreshSupportTickets}
-                style={[refreshTicketsButton, { backgroundColor: theme.input, borderColor: theme.border }]}
+                disabled={refreshingSupportTickets}
+                onPress={() => refreshSupportTickets()}
+                style={[
+                  refreshTicketsButton,
+                  {
+                    backgroundColor: theme.input,
+                    borderColor: theme.border,
+                    opacity: refreshingSupportTickets ? 0.6 : 1,
+                  },
+                ]}
               >
-                <Ionicons name="refresh" size={17} color={theme.primary} />
+                <Ionicons
+                  name={refreshingSupportTickets ? "sync" : "refresh"}
+                  size={17}
+                  color={theme.primary}
+                />
               </TouchableOpacity>
             )}
           </View>

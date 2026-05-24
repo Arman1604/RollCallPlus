@@ -269,12 +269,18 @@ function validateSupportStatusPayload(body, requestId) {
 function validateSupportReplyPayload(body, requestId) {
   const ticketId = sanitizeText(body.ticketId, 80);
   const reply = sanitizeText(body.reply, 1500);
-  const status = sanitizeText(body.status, 20) || "replied";
+  const requestedStatus = sanitizeText(body.status, 20).toLowerCase();
+  const allowedStatuses = new Set(["open", "replied", "closed"]);
+  const status = allowedStatuses.has(requestedStatus)
+    ? requestedStatus
+    : reply
+      ? "replied"
+      : "";
 
-  if (!ticketId || !reply) {
+  if (!ticketId || (!reply && !status)) {
     return {
       response: json(
-        { message: "Ticket ID and reply are required" },
+        { message: "Ticket ID and reply or status are required" },
         400,
         {},
         requestId
@@ -1697,13 +1703,15 @@ async function handleSupportTicketReply(request, env, requestId) {
   const now = new Date().toISOString();
   const updatedTicket = {
     ...ticket,
-    status: validation.payload.status,
+    status: validation.payload.status || ticket.status,
     updatedAt: now,
-    reply: {
+  };
+  if (validation.payload.reply) {
+    updatedTicket.reply = {
       message: validation.payload.reply,
       repliedAt: now,
-    },
-  };
+    };
+  }
 
   await env.SUPPORT_TICKETS.put(
     `ticket:${validation.payload.ticketId}`,
@@ -1714,7 +1722,9 @@ async function handleSupportTicketReply(request, env, requestId) {
     {
       status: "success",
       ticketId: validation.payload.ticketId,
-      message: "Support ticket replied",
+      message: validation.payload.reply
+        ? "Support ticket replied"
+        : "Support ticket updated",
     },
     200,
     {},
@@ -1822,6 +1832,10 @@ function supportAdminPage() {
       background: var(--primary-soft);
       color: var(--primary);
     }
+    button.danger {
+      background: #fee2e2;
+      color: var(--danger);
+    }
     button:disabled {
       opacity: 0.6;
       cursor: not-allowed;
@@ -1838,6 +1852,36 @@ function supportAdminPage() {
       font-size: 13px;
       font-weight: 800;
       min-height: 18px;
+    }
+    .filters {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 180px;
+      gap: 10px;
+      margin: 0 0 18px;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin: 0 0 14px;
+    }
+    .stat {
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: var(--card);
+    }
+    .stat strong {
+      display: block;
+      font-size: 24px;
+      line-height: 1;
+    }
+    .stat span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+      margin-top: 6px;
     }
     .status {
       padding: 10px 12px;
@@ -1902,7 +1946,8 @@ function supportAdminPage() {
       font-weight: 800;
     }
     @media (max-width: 820px) {
-      header, .panel, .ticket { display: block; }
+      header, .panel, .ticket, .filters, .stats { display: block; }
+      .filters > *, .stats > * { margin-bottom: 10px; }
       .panel button { width: 100%; margin-top: 12px; }
       .replyBox { margin-top: 16px; }
     }
@@ -1932,6 +1977,18 @@ function supportAdminPage() {
       <button class="secondary" id="clearToken">Clear token</button>
     </div>
 
+    <section class="stats" id="stats"></section>
+
+    <section class="filters">
+      <input id="search" placeholder="Search ticket, roll, contact, message" />
+      <select id="statusFilter">
+        <option value="all">All tickets</option>
+        <option value="open">Open</option>
+        <option value="replied">Replied</option>
+        <option value="closed">Closed</option>
+      </select>
+    </section>
+
     <section class="tickets" id="tickets">
       <div class="panel empty">Paste your admin token and load tickets.</div>
     </section>
@@ -1942,6 +1999,10 @@ function supportAdminPage() {
     const ticketsEl = document.getElementById("tickets");
     const countEl = document.getElementById("count");
     const savedHintEl = document.getElementById("savedHint");
+    const statsEl = document.getElementById("stats");
+    const searchInput = document.getElementById("search");
+    const statusFilter = document.getElementById("statusFilter");
+    let allTickets = [];
     tokenInput.value = localStorage.getItem("rollcall_support_token") || "";
 
     function updateSavedHint() {
@@ -1987,15 +2048,45 @@ function supportAdminPage() {
       ticketsEl.innerHTML = '<div class="panel empty">Loading tickets...</div>';
       try {
         const data = await api("/support-tickets");
-        const tickets = data.tickets || [];
-        countEl.textContent = tickets.length + " ticket" + (tickets.length === 1 ? "" : "s");
-        ticketsEl.innerHTML = tickets.length
-          ? tickets.map(renderTicket).join("")
-          : '<div class="panel empty">No support tickets yet.</div>';
+        allTickets = data.tickets || [];
+        renderDashboard();
       } catch (error) {
         countEl.textContent = "Error";
         ticketsEl.innerHTML = '<div class="panel empty">' + escapeHtml(error.message) + '</div>';
       }
+    }
+
+    function renderDashboard() {
+      const query = searchInput.value.trim().toLowerCase();
+      const selectedStatus = statusFilter.value;
+      const counts = allTickets.reduce((acc, ticket) => {
+        const status = ticket.status || "open";
+        acc[status] = (acc[status] || 0) + 1;
+        return acc;
+      }, {});
+      statsEl.innerHTML =
+        '<div class="stat"><strong>' + (counts.open || 0) + '</strong><span>Open</span></div>' +
+        '<div class="stat"><strong>' + (counts.replied || 0) + '</strong><span>Replied</span></div>' +
+        '<div class="stat"><strong>' + (counts.closed || 0) + '</strong><span>Closed</span></div>';
+
+      const tickets = allTickets.filter((ticket) => {
+        const statusMatch = selectedStatus === "all" || (ticket.status || "open") === selectedStatus;
+        const text = [
+          ticket.id,
+          ticket.rollNumber,
+          ticket.contact,
+          ticket.category,
+          ticket.priority,
+          ticket.message,
+          ticket.reply?.message,
+        ].join(" ").toLowerCase();
+        return statusMatch && (!query || text.includes(query));
+      });
+
+      countEl.textContent = tickets.length + " of " + allTickets.length + " ticket" + (allTickets.length === 1 ? "" : "s");
+      ticketsEl.innerHTML = tickets.length
+        ? tickets.map(renderTicket).join("")
+        : '<div class="panel empty">No tickets match this view.</div>';
     }
 
     function renderTicket(ticket) {
@@ -2029,6 +2120,8 @@ function supportAdminPage() {
           '</select>' +
           '<div class="replyActions" style="margin-top:10px">' +
             '<button data-action="reply" data-ticket-id="' + escapeHtml(ticket.id) + '">Send reply</button>' +
+            '<button class="secondary" data-action="status" data-status="open" data-ticket-id="' + escapeHtml(ticket.id) + '">Reopen</button>' +
+            '<button class="danger" data-action="status" data-status="closed" data-ticket-id="' + escapeHtml(ticket.id) + '">Close ticket</button>' +
             '<button class="secondary" data-action="copy" data-ticket-id="' + escapeHtml(ticket.id) + '">Copy ID</button>' +
           '</div>' +
         '</div>' +
@@ -2051,6 +2144,19 @@ function supportAdminPage() {
       }
     }
 
+    async function updateTicketStatus(ticketId, status) {
+      try {
+        await api("/support-ticket-reply", {
+          method: "POST",
+          body: JSON.stringify({ ticketId, status }),
+        });
+        alert(status === "closed" ? "Ticket closed." : "Ticket reopened.");
+        await loadTickets();
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+
     function copyId(ticketId) {
       navigator.clipboard?.writeText(ticketId);
       alert("Ticket ID copied.");
@@ -2058,6 +2164,8 @@ function supportAdminPage() {
 
     document.getElementById("load").addEventListener("click", loadTickets);
     document.getElementById("refresh").addEventListener("click", loadTickets);
+    searchInput.addEventListener("input", renderDashboard);
+    statusFilter.addEventListener("change", renderDashboard);
     tokenInput.addEventListener("input", updateSavedHint);
     document.getElementById("clearToken").addEventListener("click", () => {
       localStorage.removeItem("rollcall_support_token");
@@ -2074,6 +2182,9 @@ function supportAdminPage() {
       const ticketId = button.dataset.ticketId;
       if (button.dataset.action === "reply") {
         sendReply(ticketId);
+      }
+      if (button.dataset.action === "status") {
+        updateTicketStatus(ticketId, button.dataset.status);
       }
       if (button.dataset.action === "copy") {
         copyId(ticketId);
