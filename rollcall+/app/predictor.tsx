@@ -116,6 +116,24 @@ export default function Predictor() {
   const subjects = useAppStore((state) => state.attendance) as Subject[];
 
   const validSubjects = subjects.filter((subject) => subject.total > 0);
+  const sortedSubjects = [...validSubjects].sort(
+    (a, b) =>
+      percentage(b.attended, b.total) - percentage(a.attended, a.total)
+  );
+  const rankedSubjects = sortedSubjects.slice(0, 6);
+
+  const totalAttended = validSubjects.reduce(
+    (sum, subject) => sum + (subject.attended || 0),
+    0
+  );
+  const totalMissed = validSubjects.reduce(
+    (sum, subject) => sum + (subject.missed || 0),
+    0
+  );
+  const totalClasses = validSubjects.reduce(
+    (sum, subject) => sum + (subject.total || 0),
+    0
+  );
 
   const dangerSubjects = validSubjects.filter(
     (subject) => percentage(subject.attended, subject.total) < 75
@@ -141,18 +159,9 @@ export default function Predictor() {
   const highestRiskSubject =
     validSubjects.length === 0
       ? null
-      : [...validSubjects].sort(
-          (a, b) =>
-            percentage(a.attended, a.total) - percentage(b.attended, b.total)
-        )[0];
+      : [...sortedSubjects].reverse()[0];
 
-  const bestSubject =
-    validSubjects.length === 0
-      ? null
-      : [...validSubjects].sort(
-          (a, b) =>
-            percentage(b.attended, b.total) - percentage(a.attended, a.total)
-        )[0];
+  const bestSubject = validSubjects.length === 0 ? null : sortedSubjects[0];
 
   const disciplineScore =
     validSubjects.length === 0
@@ -290,6 +299,80 @@ export default function Predictor() {
                     } need recovery`
               }
             />
+          </View>
+
+          <Text style={[sectionTitle, { color: theme.text }]}>Performance Analytics</Text>
+
+          <View style={[analyticsCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <View style={analyticsHeader}>
+              <View>
+                <Text style={[cardLabel, { color: theme.muted }]}>Attendance Distribution</Text>
+                <Text style={[analyticsTitle, { color: theme.text }]}>
+                  {totalClasses > 0 ? `${totalClasses} total lectures` : "No lectures yet"}
+                </Text>
+              </View>
+
+              <View style={[analyticsScorePill, { backgroundColor: overallColor + "22", borderColor: overallColor }]}>
+                <Text style={{ color: overallColor, fontWeight: "900" }}>
+                  {averageAttendance}%
+                </Text>
+              </View>
+            </View>
+
+            <View style={[splitBarTrack, { backgroundColor: theme.input }]}>
+              <View
+                style={{
+                  width: `${totalClasses > 0 ? Math.round((totalAttended / totalClasses) * 100) : 0}%`,
+                  backgroundColor: theme.success,
+                  height: "100%",
+                }}
+              />
+              <View
+                style={{
+                  flex: 1,
+                  backgroundColor: totalMissed > 0 ? theme.danger : "transparent",
+                  height: "100%",
+                }}
+              />
+            </View>
+
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 14 }}>
+              <AnalyticsMini title="Present" value={totalAttended.toString()} color={theme.success} />
+              <AnalyticsMini title="Missed" value={totalMissed.toString()} color={theme.danger} />
+            </View>
+          </View>
+
+          <View style={[summaryCard, { backgroundColor: theme.surface, borderColor: theme.border, marginTop: 14 }]}>
+            {rankedSubjects.length === 0 ? (
+              <Text style={[emptyText, { color: theme.muted, paddingVertical: 18 }]}>
+                Subject analytics will appear after attendance sync.
+              </Text>
+            ) : (
+              rankedSubjects.map((subject, index) => {
+                const percent = percentage(subject.attended, subject.total);
+                const color = getAttendanceColor(percent);
+
+                return (
+                  <View
+                    key={subject.name + index}
+                    style={[analyticsSubjectRow, { borderBottomColor: theme.border }]}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[analyticsSubjectName, { color: theme.text }]} numberOfLines={1}>
+                        #{index + 1} {subject.name}
+                      </Text>
+                      <Text style={[mutedText, { color: theme.subtle }]}>
+                        {subject.attended} present - {subject.missed} missed
+                      </Text>
+                    </View>
+
+                    <Text style={{ color, fontWeight: "900", fontSize: 18 }}>
+                      {percent}%
+                    </Text>
+                  </View>
+                );
+              })
+            )}
           </View>
 
           <Text style={[sectionTitle, { color: theme.text }]}>Risk Subjects</Text>
@@ -515,6 +598,27 @@ function MiniStat({ title, value }: { title: string; value: string }) {
   );
 }
 
+function AnalyticsMini({
+  title,
+  value,
+  color,
+}: {
+  title: string;
+  value: string;
+  color: string;
+}) {
+  const theme = useAppTheme();
+
+  return (
+    <View style={[analyticsMini, { backgroundColor: theme.input, borderColor: theme.border }]}>
+      <Text style={[smallTitle, { color: theme.subtle }]}>{title}</Text>
+      <Text style={{ color, fontSize: 24, fontWeight: "900", marginTop: 6 }}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
 function SmallBox({
   title,
   value,
@@ -707,6 +811,60 @@ const actionTitle = {
 const actionText = {
   marginTop: 8,
   lineHeight: 21,
+};
+
+const analyticsCard = {
+  padding: 18,
+  borderRadius: 28,
+  borderWidth: 1,
+};
+
+const analyticsHeader = {
+  flexDirection: "row" as const,
+  alignItems: "center" as const,
+  justifyContent: "space-between" as const,
+  gap: 12,
+};
+
+const analyticsTitle = {
+  fontSize: 19,
+  fontWeight: "900" as const,
+  marginTop: 6,
+};
+
+const analyticsScorePill = {
+  borderRadius: 999,
+  borderWidth: 1,
+  paddingHorizontal: 12,
+  paddingVertical: 8,
+};
+
+const splitBarTrack = {
+  height: 13,
+  borderRadius: 999,
+  overflow: "hidden" as const,
+  flexDirection: "row" as const,
+  marginTop: 18,
+};
+
+const analyticsMini = {
+  flex: 1,
+  borderRadius: 20,
+  borderWidth: 1,
+  padding: 14,
+};
+
+const analyticsSubjectRow = {
+  flexDirection: "row" as const,
+  alignItems: "center" as const,
+  gap: 12,
+  paddingVertical: 14,
+  borderBottomWidth: 1,
+};
+
+const analyticsSubjectName = {
+  fontSize: 16,
+  fontWeight: "900" as const,
 };
 
 const smallBox = {

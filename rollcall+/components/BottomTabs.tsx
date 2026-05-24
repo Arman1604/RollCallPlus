@@ -5,7 +5,7 @@ import { Text, TouchableOpacity, View } from "react-native";
 
 import { useAppTheme } from "../theme/useAppTheme";
 
-type TabKey = "home" | "today" | "analytics" | "gpa" | "profile" | "predictor";
+type TabKey = "home" | "today" | "gpa" | "profile" | "predictor";
 type TabIcon = ComponentProps<typeof Ionicons>["name"];
 
 type Props = {
@@ -16,7 +16,7 @@ export default function BottomTabs({ active }: Props) {
   const theme = useAppTheme();
 
   function go(
-    path: "/dashboard" | "/today" | "/analytics" | "/gpa" | "/profile" | "/predictor"
+    path: "/dashboard" | "/today" | "/gpa" | "/profile" | "/predictor"
   ) {
     router.push(path);
   }
