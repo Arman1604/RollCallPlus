@@ -575,7 +575,25 @@ export default function Profile() {
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={supportScrollContent}
               >
-                <Text style={[modalTitle, { color: theme.text }]}>Support Center</Text>
+                <View style={supportModalHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[modalTitle, { color: theme.text }]}>Support Center</Text>
+                  </View>
+
+                  <TouchableOpacity
+                    activeOpacity={0.86}
+                    onPress={() => {
+                      setShowSupportCenter(false);
+                      router.push("/support-tickets");
+                    }}
+                    style={[
+                      supportTicketsIconButton,
+                      { backgroundColor: theme.primarySoft, borderColor: theme.border },
+                    ]}
+                  >
+                    <Ionicons name="file-tray-full-outline" size={21} color={theme.primary} />
+                  </TouchableOpacity>
+                </View>
                 <Text style={[modalSubtitle, { color: theme.muted }]}>
                   Send a support ticket with safe app and portal details.
                 </Text>
@@ -927,6 +945,21 @@ const supportModal = {
 
 const supportScrollContent = {
   paddingBottom: 190,
+};
+
+const supportModalHeader = {
+  flexDirection: "row" as const,
+  alignItems: "center" as const,
+  gap: 12,
+};
+
+const supportTicketsIconButton = {
+  width: 46,
+  height: 46,
+  borderRadius: 16,
+  borderWidth: 1,
+  alignItems: "center" as const,
+  justifyContent: "center" as const,
 };
 
 const modalHandle = {
