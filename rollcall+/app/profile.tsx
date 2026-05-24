@@ -25,10 +25,8 @@ import { useAppTheme } from "../theme/useAppTheme";
 import {
   API_BASE_URL,
   HEALTH_URL,
-  INSTANT_ALERTS_URL,
   SUPPORT_TICKET_URL,
 } from "../utils/api";
-import { registerForPushNotificationsAsync } from "../utils/notifications";
 
 type Subject = {
   attended: number;
@@ -110,9 +108,6 @@ export default function Profile() {
   const subjects = useAppStore((state) => state.attendance) as Subject[];
   const clearUser = useAppStore((state) => state.clearUser);
   const setUserData = useAppStore((state) => state.setUserData);
-  const password = useAppStore((state) => state.password);
-  const themeMode = useAppStore((state) => state.themeMode);
-  const setThemeMode = useAppStore((state) => state.setThemeMode);
   const theme = useAppTheme();
   const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>([]);
   const [showAccountPicker, setShowAccountPicker] = useState(false);
@@ -123,8 +118,6 @@ export default function Profile() {
   const [supportMessage, setSupportMessage] = useState("");
   const [submittingSupport, setSubmittingSupport] = useState(false);
   const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
-  const [instantAlertsEnabled, setInstantAlertsEnabled] = useState(false);
-  const [savingInstantAlerts, setSavingInstantAlerts] = useState(false);
 
   const totalAttended = subjects.reduce((sum, s) => sum + (s.attended || 0), 0);
   const totalMissed = subjects.reduce((sum, s) => sum + (s.missed || 0), 0);
@@ -153,12 +146,6 @@ export default function Profile() {
   useEffect(() => {
     loadSupportTickets();
   }, [loadSupportTickets]);
-
-  useEffect(() => {
-    AsyncStorage.getItem(`instantAlerts:${student?.rollNumber || ""}`).then((value) => {
-      setInstantAlertsEnabled(value === "true");
-    });
-  }, [student?.rollNumber]);
 
   async function saveSupportTicket(ticket: SupportTicket) {
     const updated = [
@@ -251,75 +238,6 @@ export default function Profile() {
         },
       },
     ]);
-  }
-
-  async function toggleTheme() {
-    const nextTheme = themeMode === "dark" ? "light" : "dark";
-    setThemeMode(nextTheme);
-    await AsyncStorage.setItem("rollcall_theme", nextTheme);
-  }
-
-  async function setInstantAlerts(enabled: boolean) {
-    if (!student?.rollNumber || !password) {
-      Alert.alert("Instant Alerts", "Login again once to enable instant alerts.");
-      return;
-    }
-
-    if (enabled) {
-      Alert.alert(
-        "Enable Instant Alerts",
-        "Optional server-side alerts require RollCall+ to securely store your portal credentials on Cloudflare. They are used only to check attendance/results and send notifications while the app is closed.",
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Enable",
-            onPress: () => saveInstantAlerts(true),
-          },
-        ]
-      );
-      return;
-    }
-
-    saveInstantAlerts(false);
-  }
-
-  async function saveInstantAlerts(enabled: boolean) {
-    try {
-      setSavingInstantAlerts(true);
-      if (enabled) {
-        await registerForPushNotificationsAsync();
-      }
-
-      const response = await fetch(INSTANT_ALERTS_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          enabled,
-          rollNumber: student?.rollNumber || "",
-          password,
-        }),
-      });
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data?.message || "Instant alerts update failed");
-      }
-
-      setInstantAlertsEnabled(enabled);
-      await AsyncStorage.setItem(
-        `instantAlerts:${student?.rollNumber || ""}`,
-        enabled ? "true" : "false"
-      );
-    } catch (error) {
-      Alert.alert(
-        "Instant Alerts",
-        String(error instanceof Error ? error.message : "Could not update instant alerts.")
-      );
-    } finally {
-      setSavingInstantAlerts(false);
-    }
   }
 
   async function submitSupportTicket() {
@@ -509,73 +427,17 @@ export default function Profile() {
             />
           </View>
 
-          <Text style={[sectionTitle, { color: theme.text }]}>Settings</Text>
-
-          <TouchableOpacity
-            activeOpacity={0.86}
-            onPress={toggleTheme}
-            style={[themeToggle, { backgroundColor: theme.surface, borderColor: theme.border }]}
-          >
-            <View>
-              <Text style={[infoLabel, { color: theme.subtle }]}>Theme</Text>
-              <Text style={[infoValue, { color: theme.text }]}>
-                {themeMode === "dark" ? "Dark Mode" : "Light Mode"}
-              </Text>
-            </View>
-
-            <View style={[themeSwitch, { backgroundColor: theme.primarySoft }]}>
-              <Ionicons
-                name={themeMode === "dark" ? "moon" : "sunny"}
-                size={22}
-                color={theme.primary}
-              />
-            </View>
-          </TouchableOpacity>
-          <TouchableOpacity
-            activeOpacity={1}
-            delayLongPress={900}
-            onLongPress={() => router.push("/backend-status")}
-          >
-            <InfoCard label="Portal Sync" value="Enabled" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            activeOpacity={0.86}
-            disabled={savingInstantAlerts}
-            onPress={() => setInstantAlerts(!instantAlertsEnabled)}
-            style={[themeToggle, { backgroundColor: theme.surface, borderColor: theme.border }]}
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={[infoLabel, { color: theme.subtle }]}>Instant Alerts</Text>
-              <Text style={[infoValue, { color: theme.text }]}>
-                {instantAlertsEnabled ? "Server push enabled" : "Tap to enable real-time alerts"}
-              </Text>
-              <Text style={[actionSubtitle, { marginTop: 4 }]}>
-                Optional server checks for attendance/result changes
-              </Text>
-            </View>
-
-            <View
-              style={[
-                themeSwitch,
-                {
-                  backgroundColor: instantAlertsEnabled
-                    ? "#22c55e22"
-                    : theme.primarySoft,
-                  opacity: savingInstantAlerts ? 0.6 : 1,
-                },
-              ]}
-            >
-              <Ionicons
-                name={instantAlertsEnabled ? "notifications" : "notifications-outline"}
-                size={22}
-                color={instantAlertsEnabled ? "#22c55e" : theme.primary}
-              />
-            </View>
-          </TouchableOpacity>
-          <InfoCard label="Login" value="Saved securely on device" />
-          <InfoCard label="App Version" value={appLabel} />
-
           <View style={actionPanel}>
+            <ActionButton
+              icon="settings-outline"
+              title="Settings"
+              subtitle="Theme, instant alerts, sync, and app info"
+              color="#22c55e"
+              backgroundColor="#22c55e22"
+              borderColor="#22c55e66"
+              onPress={() => router.push("/settings")}
+            />
+
             <ActionButton
               icon="chatbox-ellipses-outline"
               title="Support Center"
@@ -960,24 +822,6 @@ const infoValue = {
 const actionPanel = {
   marginTop: 30,
   gap: 12,
-};
-
-const themeToggle = {
-  padding: 18,
-  borderRadius: 24,
-  marginBottom: 12,
-  borderWidth: 1,
-  flexDirection: "row" as const,
-  alignItems: "center" as const,
-  justifyContent: "space-between" as const,
-};
-
-const themeSwitch = {
-  width: 52,
-  height: 52,
-  borderRadius: 18,
-  justifyContent: "center" as const,
-  alignItems: "center" as const,
 };
 
 const actionButton = {
