@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import Constants from "expo-constants";
 import { Ionicons } from "@expo/vector-icons";
 import { Stack, router } from "expo-router";
 import { useEffect, useState } from "react";
@@ -25,6 +26,12 @@ export default function Settings() {
   const [instantAlertsEnabled, setInstantAlertsEnabled] = useState(false);
   const [savingInstantAlerts, setSavingInstantAlerts] = useState(false);
   const [portalSyncTapCount, setPortalSyncTapCount] = useState(0);
+  const appVersion = Constants.expoConfig?.version || "1.0.0";
+  const appBuild =
+    Constants.expoConfig?.android?.versionCode ||
+    Constants.expoConfig?.ios?.buildNumber ||
+    "1";
+  const appLabel = `v${appVersion} (${appBuild})`;
 
   useEffect(() => {
     AsyncStorage.getItem(`instantAlerts:${student?.rollNumber || ""}`).then((value) => {
@@ -47,7 +54,7 @@ export default function Settings() {
     if (enabled) {
       Alert.alert(
         "Enable Instant Alerts",
-        "Optional server-side alerts require RollCall+ to securely store your portal credentials on Cloudflare. They are used only to check attendance/results and send notifications while the app is closed.",
+        "Optional instant alerts require RollCall+ to securely store your portal credentials for attendance/result checks. They are used only to send notifications while the app is closed.",
         [
           { text: "Cancel", style: "cancel" },
           {
@@ -164,7 +171,7 @@ export default function Settings() {
           <View style={[privacyCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <Ionicons name="shield-checkmark-outline" size={22} color={theme.info} />
             <Text style={[privacyText, { color: theme.muted }]}>
-              Instant Alerts are optional. If enabled, portal credentials are stored only for server-side attendance/result checks.
+              Instant Alerts are optional. If enabled, portal credentials are stored only for attendance/result notifications.
             </Text>
           </View>
 
@@ -172,13 +179,18 @@ export default function Settings() {
           <SettingRow
             icon="cloud-done-outline"
             title="Portal Sync"
-            subtitle="Cloudflare native scraper is active"
+            subtitle="Portal connection is active"
             color={theme.info}
             onPress={primePortalSyncAccess}
             onLongPress={openPortalSyncIfPrimed}
             rightLabel="Enabled"
           />
           <SettingInfo label="Developed By" value="Ecoo" />
+          <SettingInfo label="App Version" value={appLabel} />
+          <SettingInfo
+            label="Appearance"
+            value={themeMode === "dark" ? "Dark Mode" : "Light Mode"}
+          />
         </ScrollView>
 
         <BottomTabs active="profile" />
