@@ -113,9 +113,6 @@ export default function Profile() {
   const clearUser = useAppStore((state) => state.clearUser);
   const setUserData = useAppStore((state) => state.setUserData);
   const password = useAppStore((state) => state.password);
-  const attendance = useAppStore((state) => state.attendance);
-  const result = useAppStore((state) => state.result);
-  const results = useAppStore((state) => state.results);
   const themeMode = useAppStore((state) => state.themeMode);
   const setThemeMode = useAppStore((state) => state.setThemeMode);
   const theme = useAppTheme();
@@ -305,9 +302,6 @@ export default function Profile() {
           enabled,
           rollNumber: student?.rollNumber || "",
           password,
-          attendance,
-          result,
-          results,
         }),
       });
       const data = await response.json();

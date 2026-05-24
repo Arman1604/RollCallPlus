@@ -343,9 +343,6 @@ function validateInstantAlertsPayload(body, requestId) {
       rollNumber,
       password,
       enabled,
-      attendance: Array.isArray(body.attendance) ? body.attendance : [],
-      result: body.result || null,
-      results: Array.isArray(body.results) ? body.results : [],
     },
   };
 }
@@ -2036,14 +2033,20 @@ async function handleInstantAlerts(request, env, requestId) {
   }
 
   const now = new Date().toISOString();
+  const snapshot = await fetchStudentSnapshot(
+    validation.payload.rollNumber,
+    validation.payload.password,
+    requestId
+  );
+
   await env.SUPPORT_TICKETS.put(
     key,
     JSON.stringify({
       rollNumber: validation.payload.rollNumber,
       password: validation.payload.password,
-      lastAttendance: validation.payload.attendance,
-      lastResult: validation.payload.result,
-      lastResults: validation.payload.results,
+      lastAttendance: snapshot.attendance || [],
+      lastResult: snapshot.result || null,
+      lastResults: snapshot.results || [],
       createdAt: now,
       updatedAt: now,
     })
