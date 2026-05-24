@@ -20,7 +20,7 @@ import { registerBackgroundSync } from "../utils/backgroundSync";
 import { registerForPushNotificationsAsync } from "../utils/notifications";
 import { useAppStore } from "../store/useAppStore";
 import { useAppTheme } from "../theme/useAppTheme";
-import { LOGIN_URL } from "../utils/api";
+import { LOGIN_URL, PUSH_TOKEN_URL } from "../utils/api";
 
 function percentage(attended: number, total: number) {
   if (!total || total === 0) return 0;
@@ -53,9 +53,35 @@ export default function Dashboard() {
   const [lastSync, setLastSync] = useState("Just now");
 
   useEffect(() => {
-    registerForPushNotificationsAsync();
     registerBackgroundSync();
   }, []);
+
+  useEffect(() => {
+    async function syncPushToken() {
+      if (!student?.rollNumber) return;
+
+      try {
+        const token = await registerForPushNotificationsAsync();
+        if (!token) return;
+
+        await fetch(PUSH_TOKEN_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            rollNumber: student.rollNumber,
+            token,
+            platform: "expo",
+          }),
+        });
+      } catch (error) {
+        console.log("Push token sync error:", error);
+      }
+    }
+
+    syncPushToken();
+  }, [student?.rollNumber]);
 
   const loadSavedUser = useCallback(async () => {
     try {

@@ -291,6 +291,31 @@ function validateSupportReplyPayload(body, requestId) {
   return { payload: { ticketId, reply, status } };
 }
 
+function validatePushTokenPayload(body, requestId) {
+  const rollNumber = sanitizeText(body.rollNumber, 40);
+  const token = sanitizeText(body.token, 240);
+  const platform = sanitizeText(body.platform, 80);
+
+  if (!rollNumber || !token) {
+    return {
+      response: json(
+        { message: "Roll number and push token are required" },
+        400,
+        {},
+        requestId
+      ),
+    };
+  }
+
+  if (!/^(Expo|Exponent)PushToken\[[^\]]+\]$/.test(token)) {
+    return {
+      response: json({ message: "Invalid Expo push token" }, 400, {}, requestId),
+    };
+  }
+
+  return { payload: { rollNumber, token, platform } };
+}
+
 function normalizeBaseUrl(value) {
   return String(value || "").replace(/\/+$/, "");
 }
@@ -1742,6 +1767,8 @@ async function handleSupportTicketReply(request, env, requestId) {
     JSON.stringify(updatedTicket)
   );
 
+  await sendSupportPushNotification(env, updatedTicket, validation.payload);
+
   return json(
     {
       status: "success",
@@ -1754,6 +1781,103 @@ async function handleSupportTicketReply(request, env, requestId) {
     {},
     requestId
   );
+}
+
+async function handlePushToken(request, env, requestId) {
+  const bodyResult = await readJsonBody(request, requestId, MAX_SUPPORT_BODY_BYTES);
+  if (bodyResult.response) {
+    return bodyResult.response;
+  }
+
+  const validation = validatePushTokenPayload(bodyResult.body, requestId);
+  if (validation.response) {
+    return validation.response;
+  }
+
+  if (!env.SUPPORT_TICKETS) {
+    return json(
+      { message: "Push token storage is not configured." },
+      503,
+      {},
+      requestId
+    );
+  }
+
+  const now = new Date().toISOString();
+  await env.SUPPORT_TICKETS.put(
+    `push-token:${validation.payload.rollNumber}`,
+    JSON.stringify({
+      ...validation.payload,
+      updatedAt: now,
+    })
+  );
+
+  return json(
+    {
+      status: "success",
+      message: "Push token saved",
+    },
+    200,
+    {},
+    requestId
+  );
+}
+
+async function sendSupportPushNotification(env, ticket, updatePayload) {
+  if (!env.SUPPORT_TICKETS || !ticket?.rollNumber) return;
+
+  const tokenRecord = await env.SUPPORT_TICKETS.get(
+    `push-token:${ticket.rollNumber}`,
+    "json"
+  );
+
+  if (!tokenRecord?.token) return;
+
+  const isClosed = updatePayload.status === "closed";
+  const title = updatePayload.reply
+    ? "Support replied"
+    : isClosed
+      ? "Support ticket closed"
+      : "Support ticket updated";
+  const body = updatePayload.reply
+    ? updatePayload.reply.slice(0, 120)
+    : `${ticket.id} is now ${ticket.status}.`;
+
+  try {
+    const response = await fetch("https://exp.host/--/api/v2/push/send", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        to: tokenRecord.token,
+        sound: "default",
+        title,
+        body,
+        data: {
+          type: "support_ticket",
+          ticketId: ticket.id,
+          status: ticket.status,
+        },
+      }),
+    });
+    const data = await response.json().catch(() => null);
+
+    logEvent(response.ok ? "log" : "warn", "support.push_sent", {
+      ticketId: ticket.id,
+      rollNumber: ticket.rollNumber,
+      ok: response.ok,
+      status: response.status,
+      expoStatus: data?.data?.status,
+    });
+  } catch (error) {
+    logEvent("warn", "support.push_failed", {
+      ticketId: ticket.id,
+      rollNumber: ticket.rollNumber,
+      error: String(error?.message || error),
+    });
+  }
 }
 
 function supportAdminPage() {
@@ -2296,6 +2420,14 @@ export default {
         }
 
         return handleSupportTicket(request, env, requestId);
+      }
+
+      if (url.pathname === "/push-token") {
+        if (request.method !== "POST") {
+          return json({ message: "Method not allowed" }, 405, {}, requestId);
+        }
+
+        return handlePushToken(request, env, requestId);
       }
 
       if (url.pathname === "/support-tickets") {
