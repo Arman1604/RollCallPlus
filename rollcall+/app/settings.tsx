@@ -25,6 +25,7 @@ export default function Settings() {
   const setThemeMode = useAppStore((state) => state.setThemeMode);
   const [instantAlertsEnabled, setInstantAlertsEnabled] = useState(false);
   const [savingInstantAlerts, setSavingInstantAlerts] = useState(false);
+  const [portalSyncTapCount, setPortalSyncTapCount] = useState(0);
 
   const appVersion = Constants.expoConfig?.version || "1.0.0";
   const appBuild =
@@ -108,6 +109,16 @@ export default function Settings() {
     }
   }
 
+  function primePortalSyncAccess() {
+    setPortalSyncTapCount((count) => Math.min(count + 1, 3));
+  }
+
+  function openPortalSyncIfPrimed() {
+    if (portalSyncTapCount < 3) return;
+    setPortalSyncTapCount(0);
+    router.push("/backend-status");
+  }
+
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
@@ -171,8 +182,9 @@ export default function Settings() {
             title="Portal Sync"
             subtitle="Cloudflare native scraper is active"
             color={theme.info}
-            onPress={() => router.push("/backend-status")}
-            rightLabel="View"
+            onPress={primePortalSyncAccess}
+            onLongPress={openPortalSyncIfPrimed}
+            rightLabel="Enabled"
           />
           <SettingInfo label="Login" value="Saved securely on this device" />
           <SettingInfo label="App Version" value={appLabel} />
@@ -190,6 +202,7 @@ function SettingRow({
   subtitle,
   color,
   onPress,
+  onLongPress,
   rightLabel,
   disabled = false,
 }: {
@@ -198,6 +211,7 @@ function SettingRow({
   subtitle: string;
   color: string;
   onPress: () => void;
+  onLongPress?: () => void;
   rightLabel: string;
   disabled?: boolean;
 }) {
@@ -208,6 +222,8 @@ function SettingRow({
       activeOpacity={0.86}
       disabled={disabled}
       onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={850}
       style={[
         row,
         {
