@@ -1,4 +1,5 @@
 import { Stack } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { ScrollView, Text, View } from "react-native";
 
 import BottomTabs from "../components/BottomTabs";
@@ -45,6 +46,13 @@ function getTrend(percent: number) {
   return "Urgent Recovery";
 }
 
+function getOverallStatus(percent: number) {
+  if (percent >= 85) return "Excellent control";
+  if (percent >= 75) return "Safe, but protect it";
+  if (percent >= 65) return "Recovery mode";
+  return "Urgent attention";
+}
+
 function getClassesNeededFor75(subject: Subject) {
   if (percentage(subject.attended, subject.total) >= 75) return 0;
   return Math.ceil((0.75 * subject.total - subject.attended) / 0.25);
@@ -55,6 +63,29 @@ function getSafeMisses(subject: Subject) {
     0,
     Math.floor((subject.attended - 0.75 * subject.total) / 0.75)
   );
+}
+
+function getOverallAdvice(
+  validCount: number,
+  riskCount: number,
+  highestRiskSubject?: Subject | null
+) {
+  if (validCount === 0) {
+    return "Sync attendance once and this page will build your bunk plan automatically.";
+  }
+
+  if (riskCount === 0) {
+    return "You are above the 75% line. Use this page before skipping any class.";
+  }
+
+  if (!highestRiskSubject) {
+    return "Focus on your lowest attendance subjects first.";
+  }
+
+  const neededClasses = getClassesNeededFor75(highestRiskSubject);
+  return `Start with ${highestRiskSubject.name}. Attend ${neededClasses} class${
+    neededClasses === 1 ? "" : "es"
+  } to move back toward safety.`;
 }
 
 function getAIInsight(subject: Subject) {
@@ -167,6 +198,25 @@ export default function Predictor() {
     validSubjects.length === 0
       ? 0
       : Math.max(0, 100 - dangerSubjects.length * 12);
+  const totalSafeBunks = validSubjects.reduce(
+    (sum, subject) => sum + getSafeMisses(subject),
+    0
+  );
+  const recoveryQueue = [...dangerSubjects].sort(
+    (a, b) => percentage(a.attended, a.total) - percentage(b.attended, b.total)
+  );
+  const topRecoverySubjects = recoveryQueue.slice(0, 3);
+  const safestBunkSubject =
+    safeSubjects.length === 0
+      ? null
+      : [...safeSubjects].sort(
+          (a, b) => getSafeMisses(b) - getSafeMisses(a)
+        )[0];
+  const primaryAdvice = getOverallAdvice(
+    validSubjects.length,
+    dangerSubjects.length,
+    highestRiskSubject
+  );
 
   return (
     <>
@@ -177,10 +227,10 @@ export default function Predictor() {
 
           <Text style={eyebrow}>ROLLCALL+ INTELLIGENCE</Text>
 
-          <Text style={[title, { color: theme.text }]}>Attendance Predictor</Text>
+          <Text style={[title, { color: theme.text }]}>AI Study Guard</Text>
 
           <Text style={[subtitle, { color: theme.muted }]}>
-            Bunk safety, recovery planning, and subject-wise attendance risk.
+            See what to attend, what you can safely miss, and which subjects need recovery.
           </Text>
 
           <View
@@ -197,18 +247,30 @@ export default function Predictor() {
               elevation: 8,
             }}
           >
-            <Text style={[cardLabel, { color: theme.muted }]}>Health Score</Text>
+            <View style={heroTop}>
+              <View style={{ flex: 1 }}>
+                <Text style={[cardLabel, { color: theme.muted }]}>Attendance Health</Text>
 
-            <Text
-              style={{
-                color: overallColor,
-                fontSize: 52,
-                fontWeight: "900",
-                marginTop: 6,
-              }}
-            >
-              {averageAttendance}%
-            </Text>
+                <Text
+                  style={{
+                    color: overallColor,
+                    fontSize: 54,
+                    fontWeight: "900",
+                    marginTop: 6,
+                  }}
+                >
+                  {averageAttendance}%
+                </Text>
+
+                <Text style={[heroStatus, { color: theme.text }]}>
+                  {getOverallStatus(averageAttendance)}
+                </Text>
+              </View>
+
+              <View style={[heroIconBox, { backgroundColor: overallColor + "22", borderColor: overallColor }]}>
+                <Ionicons name="shield-checkmark" size={30} color={overallColor} />
+              </View>
+            </View>
 
             <View style={[progressTrack, { backgroundColor: theme.input }]}>
               <View
@@ -222,13 +284,7 @@ export default function Predictor() {
             </View>
 
             <Text style={[summaryText, { color: theme.mode === "dark" ? "#cbd5e1" : theme.muted }]}>
-              {validSubjects.length === 0
-                ? "No active subjects found yet. Once lectures begin, AI analysis will appear here."
-                : dangerSubjects.length > 0
-                ? `${dangerSubjects.length} subject${
-                    dangerSubjects.length > 1 ? "s" : ""
-                  } need attention. Focus on recovery before taking more bunks.`
-                : "Your attendance is currently safe. Keep this consistency to stay above 75%."}
+              {primaryAdvice}
             </Text>
           </View>
 
@@ -239,15 +295,25 @@ export default function Predictor() {
           </View>
 
           <View style={[actionCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <Text style={[cardLabel, { color: theme.muted }]}>Next Best Move</Text>
+            <View style={actionHeader}>
+              <View style={[actionIconBox, { backgroundColor: overallColor + "22" }]}>
+                <Ionicons name="flash" size={22} color={overallColor} />
+              </View>
 
-            <Text style={[actionTitle, { color: theme.text }]}>
-              {validSubjects.length === 0
-                ? "Sync attendance first"
-                : highestRiskSubject && percentage(highestRiskSubject.attended, highestRiskSubject.total) < 75
-                ? `Attend ${highestRiskSubject.name}`
-                : "Keep your current rhythm"}
-            </Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[cardLabel, { color: theme.muted }]}>Next Best Move</Text>
+
+                <Text style={[actionTitle, { color: theme.text }]}>
+                  {validSubjects.length === 0
+                    ? "Sync attendance first"
+                    : highestRiskSubject && percentage(highestRiskSubject.attended, highestRiskSubject.total) < 75
+                    ? `Attend ${highestRiskSubject.name}`
+                    : safestBunkSubject
+                    ? `${safestBunkSubject.name} has margin`
+                    : "Keep your current rhythm"}
+                </Text>
+              </View>
+            </View>
 
             <Text style={[actionText, { color: theme.mode === "dark" ? "#cbd5e1" : theme.muted }]}>
               {validSubjects.length === 0
@@ -256,8 +322,74 @@ export default function Predictor() {
                 ? `${getClassesNeededFor75(highestRiskSubject)} continuous class${
                     getClassesNeededFor75(highestRiskSubject) === 1 ? "" : "es"
                   } can bring this subject back toward 75%.`
+                : safestBunkSubject
+                ? `You can safely miss around ${getSafeMisses(safestBunkSubject)} class${
+                    getSafeMisses(safestBunkSubject) === 1 ? "" : "es"
+                  } in this subject, but keep checking before deciding.`
                 : "No subject is below 75%. Avoid unnecessary misses to protect your margin."}
             </Text>
+          </View>
+
+          <Text style={[sectionTitle, { color: theme.text }]}>Today's Plan</Text>
+
+          <View style={planGrid}>
+            <PlanCard
+              icon="warning-outline"
+              title="Recover First"
+              value={
+                topRecoverySubjects.length > 0
+                  ? topRecoverySubjects[0].name
+                  : "No recovery"
+              }
+              detail={
+                topRecoverySubjects.length > 0
+                  ? `${getClassesNeededFor75(topRecoverySubjects[0])} class${
+                      getClassesNeededFor75(topRecoverySubjects[0]) === 1 ? "" : "es"
+                    } needed`
+                  : "All subjects are safe"
+              }
+              color={topRecoverySubjects.length > 0 ? theme.danger : theme.success}
+            />
+
+            <PlanCard
+              icon="walk-outline"
+              title="Bunk Margin"
+              value={`${totalSafeBunks}`}
+              detail="Total safe misses across subjects"
+              color={totalSafeBunks > 0 ? theme.info : theme.warning}
+            />
+          </View>
+
+          <View style={[planListCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <Text style={[cardLabel, { color: theme.muted }]}>Priority Queue</Text>
+            {topRecoverySubjects.length === 0 ? (
+              <Text style={[planListText, { color: theme.mode === "dark" ? "#cbd5e1" : theme.muted }]}>
+                No urgent subject right now. Keep attending regularly and check this before skipping.
+              </Text>
+            ) : (
+              topRecoverySubjects.map((subject, index) => {
+                const percent = percentage(subject.attended, subject.total);
+                const color = getAttendanceColor(percent);
+                const neededClasses = getClassesNeededFor75(subject);
+
+                return (
+                  <View key={subject.name + index} style={[queueRow, { borderBottomColor: theme.border }]}>
+                    <View style={[queueIndex, { backgroundColor: color + "22" }]}>
+                      <Text style={{ color, fontWeight: "900" }}>{index + 1}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[queueTitle, { color: theme.text }]} numberOfLines={1}>
+                        {subject.name}
+                      </Text>
+                      <Text style={[mutedText, { color: theme.subtle }]}>
+                        Attend {neededClasses} class{neededClasses === 1 ? "" : "es"} to recover
+                      </Text>
+                    </View>
+                    <Text style={{ color, fontWeight: "900", fontSize: 16 }}>{percent}%</Text>
+                  </View>
+                );
+              })
+            )}
           </View>
 
           <Text style={[sectionTitle, { color: theme.text }]}>Semester Summary</Text>
@@ -598,6 +730,35 @@ function MiniStat({ title, value }: { title: string; value: string }) {
   );
 }
 
+function PlanCard({
+  icon,
+  title,
+  value,
+  detail,
+  color,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  value: string;
+  detail: string;
+  color: string;
+}) {
+  const theme = useAppTheme();
+
+  return (
+    <View style={[planCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+      <View style={[planIcon, { backgroundColor: color + "22" }]}>
+        <Ionicons name={icon} size={22} color={color} />
+      </View>
+      <Text style={[smallTitle, { color: theme.subtle }]}>{title}</Text>
+      <Text style={[planValue, { color: theme.text }]} numberOfLines={2}>
+        {value}
+      </Text>
+      <Text style={[planDetail, { color: theme.muted }]}>{detail}</Text>
+    </View>
+  );
+}
+
 function AnalyticsMini({
   title,
   value,
@@ -703,6 +864,27 @@ const summaryText = {
   lineHeight: 22,
 };
 
+const heroTop = {
+  flexDirection: "row" as const,
+  alignItems: "center" as const,
+  gap: 14,
+};
+
+const heroStatus = {
+  fontSize: 18,
+  fontWeight: "900" as const,
+  marginTop: 2,
+};
+
+const heroIconBox = {
+  width: 62,
+  height: 62,
+  borderRadius: 22,
+  borderWidth: 1,
+  alignItems: "center" as const,
+  justifyContent: "center" as const,
+};
+
 const sectionTitle = {
   color: "white",
   fontSize: 24,
@@ -801,6 +983,20 @@ const actionCard = {
   marginTop: 16,
 };
 
+const actionHeader = {
+  flexDirection: "row" as const,
+  alignItems: "center" as const,
+  gap: 12,
+};
+
+const actionIconBox = {
+  width: 48,
+  height: 48,
+  borderRadius: 18,
+  alignItems: "center" as const,
+  justifyContent: "center" as const,
+};
+
 const actionTitle = {
   fontSize: 20,
   lineHeight: 26,
@@ -811,6 +1007,74 @@ const actionTitle = {
 const actionText = {
   marginTop: 8,
   lineHeight: 21,
+};
+
+const planGrid = {
+  flexDirection: "row" as const,
+  gap: 12,
+};
+
+const planCard = {
+  flex: 1,
+  borderRadius: 24,
+  borderWidth: 1,
+  padding: 16,
+};
+
+const planIcon = {
+  width: 44,
+  height: 44,
+  borderRadius: 16,
+  alignItems: "center" as const,
+  justifyContent: "center" as const,
+  marginBottom: 12,
+};
+
+const planValue = {
+  fontSize: 19,
+  lineHeight: 24,
+  fontWeight: "900" as const,
+  marginTop: 7,
+};
+
+const planDetail = {
+  fontSize: 12,
+  lineHeight: 18,
+  fontWeight: "700" as const,
+  marginTop: 7,
+};
+
+const planListCard = {
+  borderRadius: 26,
+  borderWidth: 1,
+  padding: 18,
+  marginTop: 14,
+};
+
+const planListText = {
+  marginTop: 8,
+  lineHeight: 21,
+};
+
+const queueRow = {
+  flexDirection: "row" as const,
+  alignItems: "center" as const,
+  gap: 12,
+  paddingVertical: 13,
+  borderBottomWidth: 1,
+};
+
+const queueIndex = {
+  width: 34,
+  height: 34,
+  borderRadius: 13,
+  alignItems: "center" as const,
+  justifyContent: "center" as const,
+};
+
+const queueTitle = {
+  fontSize: 16,
+  fontWeight: "900" as const,
 };
 
 const analyticsCard = {
