@@ -25,7 +25,6 @@ import { useAppTheme } from "../theme/useAppTheme";
 import {
   API_BASE_URL,
   HEALTH_URL,
-  SUPPORT_TICKET_STATUS_URL,
   SUPPORT_TICKET_URL,
 } from "../utils/api";
 
@@ -104,22 +103,6 @@ function getSupportTicketsKey(rollNumber?: string) {
   return cleanRoll ? `supportTickets:${cleanRoll}` : "supportTickets";
 }
 
-function getTicketStatusLabel(status: SupportTicket["status"]) {
-  if (status === "replied") return "Replied";
-  if (status === "closed") return "Closed";
-  if (status === "failed") return "Failed";
-  if (status === "local") return "Local only";
-  return "Open";
-}
-
-function getTicketStatusColor(status: SupportTicket["status"]) {
-  if (status === "replied") return "#38bdf8";
-  if (status === "closed") return "#64748b";
-  if (status === "failed") return "#ef4444";
-  if (status === "local") return "#f59e0b";
-  return "#22c55e";
-}
-
 export default function Profile() {
   const student = useAppStore((state) => state.student);
   const subjects = useAppStore((state) => state.attendance) as Subject[];
@@ -137,7 +120,6 @@ export default function Profile() {
   const [supportMessage, setSupportMessage] = useState("");
   const [submittingSupport, setSubmittingSupport] = useState(false);
   const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
-  const [refreshingSupportTickets, setRefreshingSupportTickets] = useState(false);
 
   const totalAttended = subjects.reduce((sum, s) => sum + (s.attended || 0), 0);
   const totalMissed = subjects.reduce((sum, s) => sum + (s.missed || 0), 0);
@@ -158,9 +140,6 @@ export default function Profile() {
       const saved = await AsyncStorage.getItem(supportTicketsKey);
       const parsedTickets = saved ? JSON.parse(saved) : [];
       setSupportTickets(parsedTickets);
-      if (parsedTickets.length > 0) {
-        refreshSupportTickets(parsedTickets, false);
-      }
     } catch (error) {
       console.log("Support ticket history load error:", error);
     }
@@ -178,55 +157,6 @@ export default function Profile() {
 
     setSupportTickets(updated);
     await AsyncStorage.setItem(supportTicketsKey, JSON.stringify(updated));
-  }
-
-  async function refreshSupportTickets(
-    ticketsToRefresh: SupportTicket[] = supportTickets,
-    showError = true
-  ) {
-    if (ticketsToRefresh.length === 0 || refreshingSupportTickets) return;
-
-    try {
-      setRefreshingSupportTickets(true);
-      const response = await fetch(SUPPORT_TICKET_STATUS_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          rollNumber: student?.rollNumber || "",
-          ticketIds: ticketsToRefresh.map((ticket) => ticket.id),
-        }),
-      });
-      const data = await response.json();
-
-      if (!response.ok || !Array.isArray(data.tickets)) {
-        throw new Error(data?.message || "Ticket refresh failed");
-      }
-
-      const remoteById = new Map(
-        data.tickets.map((ticket: SupportTicket) => [ticket.id, ticket])
-      );
-      const updated = ticketsToRefresh.map((ticket) => ({
-        ...ticket,
-        ...(remoteById.get(ticket.id) || {
-          status: "local" as const,
-          updatedAt: new Date().toISOString(),
-        }),
-      }));
-
-      setSupportTickets(updated);
-      await AsyncStorage.setItem(supportTicketsKey, JSON.stringify(updated));
-    } catch (error) {
-      if (showError) {
-        Alert.alert(
-          "Support Tickets",
-          String(error instanceof Error ? error.message : "Could not refresh tickets.")
-        );
-      }
-    } finally {
-      setRefreshingSupportTickets(false);
-    }
   }
 
   async function switchAccount() {
@@ -537,95 +467,21 @@ export default function Profile() {
           <InfoCard label="Login" value="Saved securely on device" />
           <InfoCard label="App Version" value={appLabel} />
 
-          <View style={supportSectionHeader}>
-            <Text style={[sectionTitle, { color: theme.text, marginTop: 0, marginBottom: 0 }]}>
-              My Support Tickets
-            </Text>
-
-            {supportTickets.length > 0 && (
-              <TouchableOpacity
-                activeOpacity={0.86}
-                disabled={refreshingSupportTickets}
-                onPress={() => refreshSupportTickets()}
-                style={[
-                  refreshTicketsButton,
-                  {
-                    backgroundColor: theme.input,
-                    borderColor: theme.border,
-                    opacity: refreshingSupportTickets ? 0.6 : 1,
-                  },
-                ]}
-              >
-                <Ionicons
-                  name={refreshingSupportTickets ? "sync" : "refresh"}
-                  size={17}
-                  color={theme.primary}
-                />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {supportTickets.length === 0 ? (
-            <View style={[emptySupportCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-              <Text style={[emptySupportText, { color: theme.muted }]}>
-                No support tickets yet.
-              </Text>
-            </View>
-          ) : (
-            supportTickets.map((ticket) => (
-              <View
-                key={ticket.id}
-                style={[supportTicketCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
-              >
-                <View style={supportTicketHeader}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[supportTicketId, { color: theme.text }]}>
-                      {ticket.id}
-                    </Text>
-                    <Text style={[supportTicketMeta, { color: theme.subtle }]}>
-                      {ticket.category} - {ticket.priority}
-                    </Text>
-                  </View>
-
-                  <View
-                    style={[
-                      supportStatusPill,
-                      {
-                        backgroundColor: `${getTicketStatusColor(ticket.status)}22`,
-                        borderColor: getTicketStatusColor(ticket.status),
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        supportStatusText,
-                        { color: getTicketStatusColor(ticket.status) },
-                      ]}
-                    >
-                      {getTicketStatusLabel(ticket.status)}
-                    </Text>
-                  </View>
-                </View>
-
-                <Text numberOfLines={2} style={[supportTicketMessage, { color: theme.muted }]}>
-                  {ticket.message}
-                </Text>
-
-                {ticket.reply?.message && (
-                  <View style={[supportReplyBox, { backgroundColor: theme.input, borderColor: theme.border }]}>
-                    <Text style={[supportReplyLabel, { color: theme.primary }]}>
-                      Support Reply
-                    </Text>
-                    <Text style={[supportReplyText, { color: theme.text }]}>
-                      {ticket.reply.message}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            ))
-          )}
-
           <View style={actionPanel}>
+            <ActionButton
+              icon="file-tray-full-outline"
+              title="My Tickets"
+              subtitle={
+                supportTickets.length > 0
+                  ? `${supportTickets.length} saved ticket${supportTickets.length === 1 ? "" : "s"}`
+                  : "View replies and ticket history"
+              }
+              color="#22c55e"
+              backgroundColor="#22c55e22"
+              borderColor="#22c55e66"
+              onPress={() => router.push("/support-tickets")}
+            />
+
             <ActionButton
               icon="chatbox-ellipses-outline"
               title="Support Center"
