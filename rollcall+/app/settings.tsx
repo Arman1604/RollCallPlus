@@ -14,7 +14,7 @@ import {
 import BottomTabs from "../components/BottomTabs";
 import { useAppStore } from "../store/useAppStore";
 import { useAppTheme } from "../theme/useAppTheme";
-import { INSTANT_ALERTS_URL } from "../utils/api";
+import { API_BASE_URL, INSTANT_ALERTS_URL } from "../utils/api";
 import { registerForPushNotificationsAsync } from "../utils/notifications";
 
 export default function Settings() {
@@ -33,6 +33,9 @@ export default function Settings() {
     Constants.expoConfig?.ios?.buildNumber ||
     "1";
   const appLabel = `v${appVersion} (${appBuild})`;
+  const backendLabel = API_BASE_URL.includes("workers.dev")
+    ? "Cloudflare"
+    : "Local/Custom";
 
   useEffect(() => {
     AsyncStorage.getItem(`instantAlerts:${student?.rollNumber || ""}`).then((value) => {
@@ -175,6 +178,19 @@ export default function Settings() {
               Instant Alerts are optional. If enabled, portal credentials are stored only for server-side attendance/result checks.
             </Text>
           </View>
+          <SettingInfo label="Alert Check Interval" value="Every 5 minutes" />
+
+          <Text style={[sectionTitle, { color: theme.text }]}>Account</Text>
+          <SettingInfo label="Student" value={student?.name || "Student"} />
+          <SettingInfo label="Roll Number" value={student?.rollNumber || "Not available"} />
+          <SettingInfo
+            label="Credential Storage"
+            value={
+              instantAlertsEnabled
+                ? "Device + Cloudflare for opted-in alerts"
+                : "Saved securely on this device"
+            }
+          />
 
           <Text style={[sectionTitle, { color: theme.text }]}>System</Text>
           <SettingRow
@@ -186,8 +202,17 @@ export default function Settings() {
             onLongPress={openPortalSyncIfPrimed}
             rightLabel="Enabled"
           />
-          <SettingInfo label="Login" value="Saved securely on this device" />
+          <SettingInfo label="Backend" value={backendLabel} />
+          <SettingInfo label="API Mode" value="Native scraper, Railway fallback off" />
           <SettingInfo label="App Version" value={appLabel} />
+          <SettingInfo
+            label="Package"
+            value={
+              Constants.expoConfig?.android?.package ||
+              Constants.expoConfig?.ios?.bundleIdentifier ||
+              "Not available"
+            }
+          />
         </ScrollView>
 
         <BottomTabs active="profile" />
