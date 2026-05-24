@@ -469,20 +469,6 @@ export default function Profile() {
 
           <View style={actionPanel}>
             <ActionButton
-              icon="file-tray-full-outline"
-              title="My Tickets"
-              subtitle={
-                supportTickets.length > 0
-                  ? `${supportTickets.length} saved ticket${supportTickets.length === 1 ? "" : "s"}`
-                  : "View replies and ticket history"
-              }
-              color="#22c55e"
-              backgroundColor="#22c55e22"
-              borderColor="#22c55e66"
-              onPress={() => router.push("/support-tickets")}
-            />
-
-            <ActionButton
               icon="chatbox-ellipses-outline"
               title="Support Center"
               subtitle="Create a support ticket with app details"
