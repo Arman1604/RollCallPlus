@@ -243,20 +243,6 @@ export default function Dashboard() {
               </Text>
             </View>
 
-            <TouchableOpacity
-              style={{
-                width: 52,
-                height: 52,
-                borderRadius: 18,
-                backgroundColor: theme.surface,
-                justifyContent: "center",
-                alignItems: "center",
-                borderWidth: 1,
-                borderColor: theme.border,
-              }}
-            >
-              <Text style={{ fontSize: 22 }}>🔔</Text>
-            </TouchableOpacity>
           </Animated.View>
 
           <Animated.View
