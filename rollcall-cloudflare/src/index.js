@@ -316,6 +316,40 @@ function validatePushTokenPayload(body, requestId) {
   return { payload: { rollNumber, token, platform } };
 }
 
+function validateInstantAlertsPayload(body, requestId) {
+  const rollNumber = sanitizeText(body.rollNumber, 40);
+  const password = sanitizeText(body.password, 200);
+  const enabled = body.enabled === true;
+
+  if (!rollNumber) {
+    return {
+      response: json({ message: "Roll number is required" }, 400, {}, requestId),
+    };
+  }
+
+  if (enabled && !password) {
+    return {
+      response: json(
+        { message: "Password is required to enable instant alerts" },
+        400,
+        {},
+        requestId
+      ),
+    };
+  }
+
+  return {
+    payload: {
+      rollNumber,
+      password,
+      enabled,
+      attendance: Array.isArray(body.attendance) ? body.attendance : [],
+      result: body.result || null,
+      results: Array.isArray(body.results) ? body.results : [],
+    },
+  };
+}
+
 function normalizeBaseUrl(value) {
   return String(value || "").replace(/\/+$/, "");
 }
@@ -1317,6 +1351,70 @@ async function scrapeLogin(payload) {
   return json(responsePayload, 200, {}, requestId);
 }
 
+async function fetchStudentSnapshot(rollNumber, password, requestId) {
+  const response = await scrapeLogin({
+    rollNumber,
+    password,
+    forceRefresh: true,
+    requestId,
+  });
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data?.message || "Student snapshot failed");
+  }
+
+  return data;
+}
+
+function getOverallFromAttendance(attendance = []) {
+  const totals = attendance.reduce(
+    (acc, subject) => ({
+      attended: acc.attended + (subject.attended || 0),
+      total: acc.total + (subject.total || 0),
+    }),
+    { attended: 0, total: 0 }
+  );
+
+  return totals.total > 0 ? Math.round((totals.attended / totals.total) * 100) : 0;
+}
+
+function getInstantAttendanceChanges(oldAttendance = [], newAttendance = []) {
+  const oldByName = new Map(oldAttendance.map((subject) => [subject.name, subject]));
+
+  return newAttendance
+    .map((subject) => {
+      const previous = oldByName.get(subject.name);
+      if (!previous || !subject.name) return null;
+
+      const oldTotal = previous.total || 0;
+      const newTotal = subject.total || 0;
+      const oldAttended = previous.attended || 0;
+      const newAttended = subject.attended || 0;
+      if (newTotal <= oldTotal) return null;
+
+      const totalDelta = newTotal - oldTotal;
+      const presentDelta = Math.max(0, newAttended - oldAttended);
+      const absentDelta = Math.max(0, totalDelta - presentDelta);
+
+      return {
+        name: subject.name,
+        presentDelta,
+        absentDelta,
+      };
+    })
+    .filter(Boolean);
+}
+
+function resultHasInstantData(result) {
+  if (!result) return false;
+  return (
+    result.available === true ||
+    (result.subjects || []).length > 0 ||
+    (!!result.sgpa && result.sgpa !== "0" && result.sgpa !== "Not Available")
+  );
+}
+
 async function proxyToRailway(request, env, pathname, requestId) {
   const baseUrl = normalizeBaseUrl(env.RAILWAY_BACKEND_URL);
 
@@ -1880,6 +1978,160 @@ async function sendSupportPushNotification(env, ticket, updatePayload) {
   }
 }
 
+async function sendExpoPush(env, rollNumber, payload) {
+  if (!env.SUPPORT_TICKETS || !rollNumber) return false;
+
+  const tokenRecord = await env.SUPPORT_TICKETS.get(
+    `push-token:${rollNumber}`,
+    "json"
+  );
+  if (!tokenRecord?.token) return false;
+
+  const response = await fetch("https://exp.host/--/api/v2/push/send", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({
+      to: tokenRecord.token,
+      sound: "default",
+      ...payload,
+    }),
+  });
+
+  return response.ok;
+}
+
+async function handleInstantAlerts(request, env, requestId) {
+  const bodyResult = await readJsonBody(request, requestId, MAX_SUPPORT_BODY_BYTES);
+  if (bodyResult.response) return bodyResult.response;
+
+  const validation = validateInstantAlertsPayload(bodyResult.body, requestId);
+  if (validation.response) return validation.response;
+
+  if (!env.SUPPORT_TICKETS) {
+    return json({ message: "Instant alert storage is not configured." }, 503, {}, requestId);
+  }
+
+  const key = `instant-alert:${validation.payload.rollNumber}`;
+  const indexKey = `instant-alert-index:${validation.payload.rollNumber}`;
+
+  if (!validation.payload.enabled) {
+    await env.SUPPORT_TICKETS.delete(key);
+    await env.SUPPORT_TICKETS.delete(indexKey);
+    return json({ status: "success", enabled: false }, 200, {}, requestId);
+  }
+
+  const now = new Date().toISOString();
+  await env.SUPPORT_TICKETS.put(
+    key,
+    JSON.stringify({
+      rollNumber: validation.payload.rollNumber,
+      password: validation.payload.password,
+      lastAttendance: validation.payload.attendance,
+      lastResult: validation.payload.result,
+      lastResults: validation.payload.results,
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+  await env.SUPPORT_TICKETS.put(indexKey, validation.payload.rollNumber);
+
+  return json({ status: "success", enabled: true }, 200, {}, requestId);
+}
+
+async function processInstantAlerts(env) {
+  if (!env.SUPPORT_TICKETS) return;
+
+  const listed = await env.SUPPORT_TICKETS.list({
+    prefix: "instant-alert-index:",
+    limit: 20,
+  });
+  const rollNumbers = listed.keys
+    .map((item) => item.name.split(":").pop())
+    .filter(Boolean);
+
+  for (const rollNumber of rollNumbers) {
+    const key = `instant-alert:${rollNumber}`;
+    const config = await env.SUPPORT_TICKETS.get(key, "json");
+    if (!config?.rollNumber || !config?.password) continue;
+
+    try {
+      const snapshot = await fetchStudentSnapshot(
+        config.rollNumber,
+        config.password,
+        createRequestId()
+      );
+      const oldAttendance = config.lastAttendance || [];
+      const newAttendance = snapshot.attendance || [];
+      const changes = getInstantAttendanceChanges(oldAttendance, newAttendance);
+      const oldOverall = getOverallFromAttendance(oldAttendance);
+      const newOverall = getOverallFromAttendance(newAttendance);
+      const oldResult = config.lastResult || null;
+      const newResult = snapshot.result || null;
+      const resultChanged =
+        resultHasInstantData(newResult) &&
+        JSON.stringify(oldResult) !== JSON.stringify(newResult);
+
+      if (resultChanged) {
+        await sendExpoPush(env, config.rollNumber, {
+          title: "Result is Out",
+          body: "Your latest GPA/result is now available in RollCall+.",
+          data: { type: "result_out" },
+        });
+      }
+
+      if (changes.length === 1) {
+        const change = changes[0];
+        const status =
+          change.absentDelta > 0 && change.presentDelta === 0
+            ? "absent"
+            : change.presentDelta > 0 && change.absentDelta === 0
+              ? "present"
+              : "updated";
+        await sendExpoPush(env, config.rollNumber, {
+          title: "Today's Attendance Updated",
+          body: `${change.name} marked ${status}. Overall attendance: ${newOverall}%`,
+          data: { type: "attendance_update" },
+        });
+      } else if (changes.length > 1) {
+        const presentCount = changes.filter((change) => change.presentDelta > 0).length;
+        const absentCount = changes.filter((change) => change.absentDelta > 0).length;
+        await sendExpoPush(env, config.rollNumber, {
+          title: "Today's Attendance Updated",
+          body: `${presentCount} present, ${absentCount} absent updates. Overall: ${newOverall}%`,
+          data: { type: "attendance_update" },
+        });
+      }
+
+      if (oldOverall >= 75 && newOverall < 75) {
+        await sendExpoPush(env, config.rollNumber, {
+          title: "Attendance Dropped Below 75%",
+          body: `Your overall attendance is now ${newOverall}%.`,
+          data: { type: "attendance_warning" },
+        });
+      }
+
+      await env.SUPPORT_TICKETS.put(
+        key,
+        JSON.stringify({
+          ...config,
+          lastAttendance: newAttendance,
+          lastResult: newResult,
+          lastResults: snapshot.results || config.lastResults || [],
+          updatedAt: new Date().toISOString(),
+        })
+      );
+    } catch (error) {
+      logEvent("warn", "instant_alert.check_failed", {
+        rollNumber,
+        error: String(error?.message || error),
+      });
+    }
+  }
+}
+
 function supportAdminPage() {
   const html = String.raw`<!doctype html>
 <html lang="en">
@@ -2430,6 +2682,14 @@ export default {
         return handlePushToken(request, env, requestId);
       }
 
+      if (url.pathname === "/instant-alerts") {
+        if (request.method !== "POST") {
+          return json({ message: "Method not allowed" }, 405, {}, requestId);
+        }
+
+        return handleInstantAlerts(request, env, requestId);
+      }
+
       if (url.pathname === "/support-tickets") {
         if (request.method !== "GET") {
           return json({ message: "Method not allowed" }, 405, {}, requestId);
@@ -2474,5 +2734,8 @@ export default {
         requestId
       );
     }
+  },
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(processInstantAlerts(env));
   },
 };

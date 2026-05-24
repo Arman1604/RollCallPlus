@@ -14,6 +14,7 @@ const normalizedApiBaseUrl = API_BASE_URL.replace(/\/+$/, "");
 export const LOGIN_URL = `${normalizedApiBaseUrl}/login`;
 export const HEALTH_URL = `${normalizedApiBaseUrl}/health`;
 export const GNDU_RESULT_URL = `${normalizedApiBaseUrl}/gndu-result`;
+export const INSTANT_ALERTS_URL = `${normalizedApiBaseUrl}/instant-alerts`;
 export const PUSH_TOKEN_URL = `${normalizedApiBaseUrl}/push-token`;
 export const SUPPORT_TICKET_URL = `${normalizedApiBaseUrl}/support-ticket`;
 export const SUPPORT_TICKET_STATUS_URL = `${normalizedApiBaseUrl}/support-ticket-status`;

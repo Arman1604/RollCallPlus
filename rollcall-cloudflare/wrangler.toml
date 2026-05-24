@@ -10,3 +10,6 @@ NATIVE_FALLBACK_TO_RAILWAY = "false"
 [[kv_namespaces]]
 binding = "SUPPORT_TICKETS"
 id = "5310be13379349a3bd0883eaa51a2a44"
+
+[triggers]
+crons = ["*/5 * * * *"]
