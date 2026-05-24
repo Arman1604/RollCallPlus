@@ -100,8 +100,9 @@ export default function SupportTickets() {
           throw new Error(data?.message || "Ticket refresh failed");
         }
 
+        const remoteTickets = data.tickets as SupportTicket[];
         const remoteById = new Map(
-          data.tickets.map((ticket: SupportTicket) => [ticket.id, ticket])
+          remoteTickets.map((ticket) => [ticket.id, ticket])
         );
         const updated = ticketsToRefresh.map((ticket) => ({
           ...ticket,
@@ -110,8 +111,12 @@ export default function SupportTickets() {
             updatedAt: new Date().toISOString(),
           }),
         }));
+        const localIds = new Set(ticketsToRefresh.map((ticket) => ticket.id));
+        const recoveredTickets = remoteTickets.filter(
+          (ticket) => !localIds.has(ticket.id)
+        );
 
-        await saveTickets(updated);
+        await saveTickets([...recoveredTickets, ...updated].slice(0, 10));
       } catch (error) {
         if (showError) {
           Alert.alert(

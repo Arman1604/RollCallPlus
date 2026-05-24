@@ -1638,15 +1638,40 @@ async function handleSupportTicketStatus(request, env, requestId) {
     );
   }
 
-  const tickets = (
+  const ticketIds = validation.payload.ticketIds;
+  const requestedTickets = (
     await Promise.all(
-      validation.payload.ticketIds.map((ticketId) =>
+      ticketIds.map((ticketId) =>
         env.SUPPORT_TICKETS.get(`ticket:${ticketId}`, "json")
       )
     )
-  )
-    .filter(Boolean)
-    .map((ticket) => ({
+  ).filter(Boolean);
+
+  const listed = validation.payload.rollNumber
+    ? await env.SUPPORT_TICKETS.list({
+        prefix: "ticket-index:",
+        limit: 50,
+      })
+    : { keys: [] };
+  const rollTicketIds = listed.keys
+    .map((item) => item.name.split(":").pop())
+    .filter(Boolean);
+  const rollTickets = (
+    await Promise.all(
+      rollTicketIds.map((ticketId) =>
+        env.SUPPORT_TICKETS.get(`ticket:${ticketId}`, "json")
+      )
+    )
+  ).filter(
+    (ticket) => ticket && ticket.rollNumber === validation.payload.rollNumber
+  );
+
+  const ticketMap = new Map();
+  [...requestedTickets, ...rollTickets].forEach((ticket) => {
+    ticketMap.set(ticket.id, ticket);
+  });
+
+  const tickets = Array.from(ticketMap.values()).map((ticket) => ({
       id: ticket.id,
       status: ticket.status,
       category: ticket.category,
