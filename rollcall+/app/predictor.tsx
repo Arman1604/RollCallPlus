@@ -1,6 +1,7 @@
 import { Stack } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { ScrollView, Text, View } from "react-native";
+import { useState } from "react";
+import { ScrollView, Text, TouchableOpacity, View } from "react-native";
 
 import BottomTabs from "../components/BottomTabs";
 import { useAppStore } from "../store/useAppStore";
@@ -88,6 +89,24 @@ function getOverallAdvice(
   } to move back toward safety.`;
 }
 
+function getWeeklyRecoveryPlan(subject: Subject) {
+  const neededClasses = getClassesNeededFor75(subject);
+  const days = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+
+  return days.map((day, index) => {
+    const shouldAttend = index < Math.min(neededClasses, days.length);
+    const attended = subject.attended + (shouldAttend ? index + 1 : Math.min(neededClasses, days.length));
+    const total = subject.total + index + 1;
+    const projected = percentage(attended, total);
+
+    return {
+      day,
+      action: shouldAttend ? "Attend" : "Maintain",
+      projected,
+    };
+  });
+}
+
 function getAIInsight(subject: Subject) {
   const percent = percentage(subject.attended, subject.total);
   const safeMisses = getSafeMisses(subject);
@@ -145,6 +164,8 @@ function getAIInsight(subject: Subject) {
 export default function Predictor() {
   const theme = useAppTheme();
   const subjects = useAppStore((state) => state.attendance) as Subject[];
+  const [selectedSubjectName, setSelectedSubjectName] = useState<string | null>(null);
+  const [expandedSubjects, setExpandedSubjects] = useState<Record<string, boolean>>({});
 
   const validSubjects = subjects.filter((subject) => subject.total > 0);
   const sortedSubjects = [...validSubjects].sort(
@@ -217,6 +238,29 @@ export default function Predictor() {
     dangerSubjects.length,
     highestRiskSubject
   );
+  const simulatorSubject =
+    validSubjects.find((subject) => subject.name === selectedSubjectName) ||
+    highestRiskSubject ||
+    validSubjects[0] ||
+    null;
+  const simulatorPercent = simulatorSubject
+    ? percentage(simulatorSubject.attended, simulatorSubject.total)
+    : 0;
+  const simulatorAttendPercent = simulatorSubject
+    ? percentage(simulatorSubject.attended + 1, simulatorSubject.total + 1)
+    : 0;
+  const simulatorMissPercent = simulatorSubject
+    ? percentage(simulatorSubject.attended, simulatorSubject.total + 1)
+    : 0;
+  const weeklyPlanSubject = highestRiskSubject || safestBunkSubject || validSubjects[0] || null;
+  const weeklyPlan = weeklyPlanSubject ? getWeeklyRecoveryPlan(weeklyPlanSubject) : [];
+
+  function toggleSubject(subjectName: string) {
+    setExpandedSubjects((current) => ({
+      ...current,
+      [subjectName]: !current[subjectName],
+    }));
+  }
 
   return (
     <>
@@ -392,6 +436,112 @@ export default function Predictor() {
             )}
           </View>
 
+          <Text style={[sectionTitle, { color: theme.text }]}>What If?</Text>
+
+          <View style={[simulatorCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <Text style={[cardLabel, { color: theme.muted }]}>Bunk Simulator</Text>
+            <Text style={[simulatorTitle, { color: theme.text }]}>
+              {simulatorSubject ? simulatorSubject.name : "No subject selected"}
+            </Text>
+
+            {validSubjects.length > 0 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={subjectChipRow}
+              >
+                {validSubjects.map((subject) => {
+                  const selected = simulatorSubject?.name === subject.name;
+                  const percent = percentage(subject.attended, subject.total);
+                  const color = getAttendanceColor(percent);
+
+                  return (
+                    <TouchableOpacity
+                      key={subject.name}
+                      activeOpacity={0.86}
+                      onPress={() => setSelectedSubjectName(subject.name)}
+                      style={[
+                        subjectChip,
+                        {
+                          backgroundColor: selected ? color + "22" : theme.input,
+                          borderColor: selected ? color : theme.border,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          subjectChipText,
+                          { color: selected ? color : theme.text },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {subject.name}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
+
+            {simulatorSubject ? (
+              <>
+                <View style={simulatorResultRow}>
+                  <SimulatorBox title="Current" value={`${simulatorPercent}%`} color={getAttendanceColor(simulatorPercent)} />
+                  <SimulatorBox title="Attend next" value={`${simulatorAttendPercent}%`} color={theme.success} />
+                  <SimulatorBox title="Miss next" value={`${simulatorMissPercent}%`} color={theme.danger} />
+                </View>
+
+                <Text style={[simulatorAdvice, { color: theme.mode === "dark" ? "#cbd5e1" : theme.muted }]}>
+                  {simulatorMissPercent < 75 && simulatorPercent >= 75
+                    ? "Missing the next class will put this subject near risk. Better attend."
+                    : simulatorPercent < 75
+                    ? `Attend ${getClassesNeededFor75(simulatorSubject)} class${
+                        getClassesNeededFor75(simulatorSubject) === 1 ? "" : "es"
+                      } continuously to recover.`
+                    : "This subject has margin, but check before every bunk."}
+                </Text>
+              </>
+            ) : (
+              <Text style={[simulatorAdvice, { color: theme.muted }]}>
+                Sync attendance to simulate class decisions.
+              </Text>
+            )}
+          </View>
+
+          <Text style={[sectionTitle, { color: theme.text }]}>Weekly Recovery Plan</Text>
+
+          <View style={[weeklyCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <Text style={[cardLabel, { color: theme.muted }]}>Focus Subject</Text>
+            <Text style={[simulatorTitle, { color: theme.text }]}>
+              {weeklyPlanSubject ? weeklyPlanSubject.name : "No active subject"}
+            </Text>
+
+            {weeklyPlan.length > 0 ? (
+              <View style={weekRow}>
+                {weeklyPlan.map((item) => {
+                  const color = item.action === "Attend" ? theme.primary : theme.success;
+
+                  return (
+                    <View key={item.day} style={[weekDayCard, { backgroundColor: theme.input, borderColor: theme.border }]}>
+                      <Text style={[weekDay, { color: theme.subtle }]}>{item.day}</Text>
+                      <Ionicons
+                        name={item.action === "Attend" ? "school-outline" : "checkmark-circle-outline"}
+                        size={20}
+                        color={color}
+                      />
+                      <Text style={[weekAction, { color }]}>{item.action}</Text>
+                      <Text style={[weekPercent, { color: theme.text }]}>{item.projected}%</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            ) : (
+              <Text style={[simulatorAdvice, { color: theme.muted }]}>
+                Sync attendance to build a weekly plan.
+              </Text>
+            )}
+          </View>
+
           <Text style={[sectionTitle, { color: theme.text }]}>Semester Summary</Text>
 
           <View style={[summaryCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -523,6 +673,8 @@ export default function Predictor() {
                 key={subject.name + index}
                 subject={subject}
                 percent={percentage(subject.attended, subject.total)}
+                expanded={!!expandedSubjects[subject.name]}
+                onToggle={() => toggleSubject(subject.name)}
               />
             ))
           )}
@@ -537,6 +689,8 @@ export default function Predictor() {
                 key={subject.name + index}
                 subject={subject}
                 percent={percentage(subject.attended, subject.total)}
+                expanded={!!expandedSubjects[subject.name]}
+                onToggle={() => toggleSubject(subject.name)}
               />
             ))
           )}
@@ -551,9 +705,13 @@ export default function Predictor() {
 function PredictionCard({
   subject,
   percent,
+  expanded,
+  onToggle,
 }: {
   subject: Subject;
   percent: number;
+  expanded: boolean;
+  onToggle: () => void;
 }) {
   const theme = useAppTheme();
   const color = getAttendanceColor(percent);
@@ -589,7 +747,11 @@ function PredictionCard({
         elevation: 5,
       }}
     >
-      <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
+      <TouchableOpacity
+        activeOpacity={0.86}
+        onPress={onToggle}
+        style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}
+      >
         <View style={{ flex: 1 }}>
           <Text style={[subjectName, { color: theme.text }]}>{subject.name}</Text>
 
@@ -613,7 +775,7 @@ function PredictionCard({
             {percent}%
           </Text>
         </View>
-      </View>
+      </TouchableOpacity>
 
       <View style={[progressTrack, { backgroundColor: theme.input }]}>
         <View
@@ -626,78 +788,93 @@ function PredictionCard({
         />
       </View>
 
-      <View style={{ flexDirection: "row", gap: 10, marginTop: 16 }}>
-        <SmallBox title="Risk" value={`${riskScore}/100`} color={color} />
-        <SmallBox title="Priority" value={priority} color={color} />
-      </View>
-
-      <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
-        <SmallBox title="Trend" value={trend} color={color} />
-        <SmallBox
-          title="Need"
-          value={
-            classesNeeded === 0
-              ? "No recovery"
-              : `${classesNeeded} class${classesNeeded > 1 ? "es" : ""}`
-          }
-          color={color}
+      <TouchableOpacity activeOpacity={0.86} onPress={onToggle} style={expandHint}>
+        <Text style={[expandHintText, { color: theme.subtle }]}>
+          {expanded ? "Hide full analysis" : "Tap to view full analysis"}
+        </Text>
+        <Ionicons
+          name={expanded ? "chevron-up" : "chevron-down"}
+          size={18}
+          color={theme.subtle}
         />
-      </View>
+      </TouchableOpacity>
 
-      <View
-        style={{
-          backgroundColor: theme.input,
-          padding: 16,
-          borderRadius: 22,
-          marginTop: 16,
-          borderWidth: 1,
-          borderColor: color,
-        }}
-      >
-        <Text style={{ color, fontWeight: "900", fontSize: 15 }}>
-          Risk Analysis - {ai.confidence} confidence
-        </Text>
+      {expanded && (
+        <>
+          <View style={{ flexDirection: "row", gap: 10, marginTop: 16 }}>
+            <SmallBox title="Risk" value={`${riskScore}/100`} color={color} />
+            <SmallBox title="Priority" value={priority} color={color} />
+          </View>
 
-        <Text style={[analysisTitle, { color: theme.text }]}>
-          {ai.level} - {ai.mood}
-        </Text>
+          <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
+            <SmallBox title="Trend" value={trend} color={color} />
+            <SmallBox
+              title="Need"
+              value={
+                classesNeeded === 0
+                  ? "No recovery"
+                  : `${classesNeeded} class${classesNeeded > 1 ? "es" : ""}`
+              }
+              color={color}
+            />
+          </View>
 
-        <Text style={[analysisText, { color: theme.mode === "dark" ? "#cbd5e1" : theme.muted }]}>{ai.advice}</Text>
-      </View>
+          <View
+            style={{
+              backgroundColor: theme.input,
+              padding: 16,
+              borderRadius: 22,
+              marginTop: 16,
+              borderWidth: 1,
+              borderColor: color,
+            }}
+          >
+            <Text style={{ color, fontWeight: "900", fontSize: 15 }}>
+              Risk Analysis - {ai.confidence} confidence
+            </Text>
 
-      <View
-        style={{
-          backgroundColor: color + "18",
-          padding: 16,
-          borderRadius: 22,
-          marginTop: 14,
-          borderWidth: 1,
-          borderColor: color + "66",
-        }}
-      >
-        <Text style={{ color, fontWeight: "900", fontSize: 15 }}>
-          Smart Predictions
-        </Text>
+            <Text style={[analysisTitle, { color: theme.text }]}>
+              {ai.level} - {ai.mood}
+            </Text>
 
-        <Text style={[predictionText, { color: theme.mode === "dark" ? "#cbd5e1" : theme.muted }]}>
-          Safe bunks remaining:{" "}
-          <Text style={[boldWhite, { color: theme.text }]}>{safeMisses}</Text>
-        </Text>
+            <Text style={[analysisText, { color: theme.mode === "dark" ? "#cbd5e1" : theme.muted }]}>{ai.advice}</Text>
+          </View>
 
-        <Text style={[predictionText, { color: theme.mode === "dark" ? "#cbd5e1" : theme.muted }]}>
-          If you miss next class:{" "}
-          <Text style={{ color: "#ef4444", fontWeight: "900" }}>
-            {nextMissPercent}%
-          </Text>
-        </Text>
+          <View
+            style={{
+              backgroundColor: color + "18",
+              padding: 16,
+              borderRadius: 22,
+              marginTop: 14,
+              borderWidth: 1,
+              borderColor: color + "66",
+            }}
+          >
+            <Text style={{ color, fontWeight: "900", fontSize: 15 }}>
+              Smart Predictions
+            </Text>
 
-        <Text style={[predictionText, { color: theme.mode === "dark" ? "#cbd5e1" : theme.muted }]}>
-          If you attend next class:{" "}
-          <Text style={{ color: "#22c55e", fontWeight: "900" }}>
-            {nextAttendPercent}%
-          </Text>
-        </Text>
-      </View>
+            <Text style={[predictionText, { color: theme.mode === "dark" ? "#cbd5e1" : theme.muted }]}>
+              Safe bunks remaining:{" "}
+              <Text style={[boldWhite, { color: theme.text }]}>{safeMisses}</Text>
+            </Text>
+
+            <Text style={[predictionText, { color: theme.mode === "dark" ? "#cbd5e1" : theme.muted }]}>
+              If you miss next class:{" "}
+              <Text style={{ color: "#ef4444", fontWeight: "900" }}>
+                {nextMissPercent}%
+              </Text>
+            </Text>
+
+            <Text style={[predictionText, { color: theme.mode === "dark" ? "#cbd5e1" : theme.muted }]}>
+              If you attend next class:{" "}
+              <Text style={{ color: "#22c55e", fontWeight: "900" }}>
+                {nextAttendPercent}%
+              </Text>
+            </Text>
+          </View>
+        </>
+      )}
 
       <View style={[recommendationBox, { backgroundColor: theme.input, borderColor: theme.border }]}>
         <Text style={{ color, fontWeight: "900" }}>Final Recommendation</Text>
@@ -755,6 +932,27 @@ function PlanCard({
         {value}
       </Text>
       <Text style={[planDetail, { color: theme.muted }]}>{detail}</Text>
+    </View>
+  );
+}
+
+function SimulatorBox({
+  title,
+  value,
+  color,
+}: {
+  title: string;
+  value: string;
+  color: string;
+}) {
+  const theme = useAppTheme();
+
+  return (
+    <View style={[simulatorBox, { backgroundColor: theme.input, borderColor: theme.border }]}>
+      <Text style={[smallTitle, { color: theme.subtle }]}>{title}</Text>
+      <Text style={{ color, fontSize: 21, fontWeight: "900", marginTop: 7 }}>
+        {value}
+      </Text>
     </View>
   );
 }
@@ -1074,6 +1272,109 @@ const queueIndex = {
 
 const queueTitle = {
   fontSize: 16,
+  fontWeight: "900" as const,
+};
+
+const simulatorCard = {
+  borderRadius: 28,
+  borderWidth: 1,
+  padding: 18,
+};
+
+const simulatorTitle = {
+  fontSize: 20,
+  lineHeight: 26,
+  fontWeight: "900" as const,
+  marginTop: 6,
+};
+
+const subjectChipRow = {
+  gap: 8,
+  paddingTop: 14,
+  paddingBottom: 4,
+};
+
+const subjectChip = {
+  maxWidth: 160,
+  borderWidth: 1,
+  borderRadius: 999,
+  paddingHorizontal: 13,
+  paddingVertical: 9,
+};
+
+const subjectChipText = {
+  fontSize: 12,
+  fontWeight: "900" as const,
+};
+
+const simulatorResultRow = {
+  flexDirection: "row" as const,
+  gap: 10,
+  marginTop: 14,
+};
+
+const simulatorBox = {
+  flex: 1,
+  borderWidth: 1,
+  borderRadius: 20,
+  padding: 12,
+};
+
+const simulatorAdvice = {
+  marginTop: 14,
+  lineHeight: 21,
+  fontWeight: "700" as const,
+};
+
+const weeklyCard = {
+  borderRadius: 28,
+  borderWidth: 1,
+  padding: 18,
+};
+
+const weekRow = {
+  flexDirection: "row" as const,
+  gap: 8,
+  marginTop: 14,
+};
+
+const weekDayCard = {
+  flex: 1,
+  borderWidth: 1,
+  borderRadius: 18,
+  paddingVertical: 12,
+  paddingHorizontal: 6,
+  alignItems: "center" as const,
+};
+
+const weekDay = {
+  fontSize: 11,
+  fontWeight: "900" as const,
+  marginBottom: 8,
+};
+
+const weekAction = {
+  fontSize: 10,
+  fontWeight: "900" as const,
+  marginTop: 6,
+};
+
+const weekPercent = {
+  fontSize: 13,
+  fontWeight: "900" as const,
+  marginTop: 6,
+};
+
+const expandHint = {
+  flexDirection: "row" as const,
+  alignItems: "center" as const,
+  justifyContent: "center" as const,
+  gap: 6,
+  marginTop: 12,
+};
+
+const expandHintText = {
+  fontSize: 12,
   fontWeight: "900" as const,
 };
 
