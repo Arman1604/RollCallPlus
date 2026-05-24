@@ -49,7 +49,7 @@ type SupportPriority = "Normal" | "Urgent";
 
 type SupportTicket = {
   id: string;
-  status: "open" | "replied" | "closed" | "failed";
+  status: "open" | "replied" | "closed" | "failed" | "local";
   category: SupportCategory;
   priority: SupportPriority;
   message: string;
@@ -108,6 +108,7 @@ function getTicketStatusLabel(status: SupportTicket["status"]) {
   if (status === "replied") return "Replied";
   if (status === "closed") return "Closed";
   if (status === "failed") return "Failed";
+  if (status === "local") return "Local only";
   return "Open";
 }
 
@@ -115,6 +116,7 @@ function getTicketStatusColor(status: SupportTicket["status"]) {
   if (status === "replied") return "#38bdf8";
   if (status === "closed") return "#64748b";
   if (status === "failed") return "#ef4444";
+  if (status === "local") return "#f59e0b";
   return "#22c55e";
 }
 
@@ -207,7 +209,10 @@ export default function Profile() {
       );
       const updated = ticketsToRefresh.map((ticket) => ({
         ...ticket,
-        ...(remoteById.get(ticket.id) || {}),
+        ...(remoteById.get(ticket.id) || {
+          status: "local" as const,
+          updatedAt: new Date().toISOString(),
+        }),
       }));
 
       setSupportTickets(updated);
