@@ -44,6 +44,10 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
   const theme = useAppTheme();
+  const isLight = theme.mode === "light";
+  const loginCardBackground = isLight ? "#ffffff" : theme.surface;
+  const loginInputBackground = isLight ? "#f8fafc" : theme.input;
+  const loginBorder = isLight ? "#e2e8f0" : theme.border;
 
   const setUserData = useAppStore.getState().setUserData;
 
@@ -288,7 +292,14 @@ export default function LoginScreen() {
 
           <Animated.View
             entering={FadeInDown.delay(120).duration(700)}
-            style={[loginCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
+            style={[
+              loginCard,
+              {
+                backgroundColor: loginCardBackground,
+                borderColor: loginBorder,
+                shadowColor: isLight ? "#94a3b8" : "#7c3aed",
+              },
+            ]}
           >
             <View style={cardHeader}>
               <View>
@@ -306,7 +317,7 @@ export default function LoginScreen() {
               </TouchableOpacity>
             </View>
 
-            <View style={[inputShell, { backgroundColor: theme.input, borderColor: theme.border }]}>
+            <View style={[inputShell, { backgroundColor: loginInputBackground, borderColor: loginBorder }]}>
               <Ionicons name="id-card-outline" size={21} color={theme.subtle} />
 
               <TextInput
@@ -320,7 +331,7 @@ export default function LoginScreen() {
               />
             </View>
 
-            <View style={[inputShell, { marginBottom: 0, backgroundColor: theme.input, borderColor: theme.border }]}>
+            <View style={[inputShell, { marginBottom: 0, backgroundColor: loginInputBackground, borderColor: loginBorder }]}>
               <Ionicons name="lock-closed-outline" size={21} color={theme.subtle} />
 
               <TextInput

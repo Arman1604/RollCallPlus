@@ -53,9 +53,18 @@ export async function registerForPushNotificationsAsync() {
     return null;
   }
 
-  const token = await Notifications.getExpoPushTokenAsync({
-    projectId,
-  });
+  let token;
+
+  try {
+    token = await Notifications.getExpoPushTokenAsync({
+      projectId,
+    });
+  } catch (error) {
+    console.log("Expo push token error:", error);
+    throw new Error(
+      "Push notifications are not ready in this build yet. Firebase/FCM credentials must be added before Instant Alerts can be enabled."
+    );
+  }
 
   console.log("Expo Push Token:", token.data);
 

@@ -74,7 +74,12 @@ export default function Settings() {
     try {
       setSavingInstantAlerts(true);
       if (enabled) {
-        await registerForPushNotificationsAsync();
+        const pushToken = await registerForPushNotificationsAsync();
+        if (!pushToken) {
+          throw new Error(
+            "Notification permission was not enabled. Please allow notifications and try again."
+          );
+        }
       }
 
       const response = await fetch(INSTANT_ALERTS_URL, {
