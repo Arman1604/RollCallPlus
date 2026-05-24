@@ -89,18 +89,21 @@ function getOverallAdvice(
   } to move back toward safety.`;
 }
 
-function getWeeklyRecoveryPlan(subject: Subject) {
+function getRecoverySteps(subject: Subject) {
   const neededClasses = getClassesNeededFor75(subject);
-  const days = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+  const steps = [1, 2, 3, 4, 5];
+  const isSafe = percentage(subject.attended, subject.total) >= 75;
 
-  return days.map((day, index) => {
-    const shouldAttend = index < Math.min(neededClasses, days.length);
-    const attended = subject.attended + (shouldAttend ? index + 1 : Math.min(neededClasses, days.length));
+  return steps.map((step, index) => {
+    const shouldAttend = isSafe || index < Math.min(neededClasses, steps.length);
+    const attended =
+      subject.attended +
+      (shouldAttend ? index + 1 : Math.min(neededClasses, steps.length));
     const total = subject.total + index + 1;
     const projected = percentage(attended, total);
 
     return {
-      day,
+      label: `Class ${step}`,
       action: shouldAttend ? "Attend" : "Maintain",
       projected,
     };
@@ -253,7 +256,13 @@ export default function Predictor() {
     ? percentage(simulatorSubject.attended, simulatorSubject.total + 1)
     : 0;
   const weeklyPlanSubject = highestRiskSubject || safestBunkSubject || validSubjects[0] || null;
-  const weeklyPlan = weeklyPlanSubject ? getWeeklyRecoveryPlan(weeklyPlanSubject) : [];
+  const weeklyPlan = weeklyPlanSubject ? getRecoverySteps(weeklyPlanSubject) : [];
+  const weeklyPlanCurrent = weeklyPlanSubject
+    ? percentage(weeklyPlanSubject.attended, weeklyPlanSubject.total)
+    : 0;
+  const weeklyPlanNeeded = weeklyPlanSubject
+    ? getClassesNeededFor75(weeklyPlanSubject)
+    : 0;
 
   function toggleSubject(subjectName: string) {
     setExpandedSubjects((current) => ({
@@ -508,7 +517,7 @@ export default function Predictor() {
             )}
           </View>
 
-          <Text style={[sectionTitle, { color: theme.text }]}>Weekly Recovery Plan</Text>
+          <Text style={[sectionTitle, { color: theme.text }]}>Recovery Plan</Text>
 
           <View style={[weeklyCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <Text style={[cardLabel, { color: theme.muted }]}>Focus Subject</Text>
@@ -517,27 +526,71 @@ export default function Predictor() {
             </Text>
 
             {weeklyPlan.length > 0 ? (
-              <View style={weekRow}>
-                {weeklyPlan.map((item) => {
-                  const color = item.action === "Attend" ? theme.primary : theme.success;
+              <>
+                <Text style={[recoveryExplain, { color: theme.mode === "dark" ? "#cbd5e1" : theme.muted }]}>
+                  Goal is 75%. Follow the next class plan below. Each row shows your estimated percentage after that class.
+                </Text>
 
-                  return (
-                    <View key={item.day} style={[weekDayCard, { backgroundColor: theme.input, borderColor: theme.border }]}>
-                      <Text style={[weekDay, { color: theme.subtle }]}>{item.day}</Text>
-                      <Ionicons
-                        name={item.action === "Attend" ? "school-outline" : "checkmark-circle-outline"}
-                        size={20}
-                        color={color}
-                      />
-                      <Text style={[weekAction, { color }]}>{item.action}</Text>
-                      <Text style={[weekPercent, { color: theme.text }]}>{item.projected}%</Text>
-                    </View>
-                  );
-                })}
-              </View>
+                <View style={recoverySummaryRow}>
+                  <RecoverySummaryBox title="Now" value={`${weeklyPlanCurrent}%`} color={getAttendanceColor(weeklyPlanCurrent)} />
+                  <RecoverySummaryBox title="Goal" value="75%" color={theme.success} />
+                  <RecoverySummaryBox
+                    title="Need"
+                    value={weeklyPlanNeeded === 0 ? "Safe" : `${weeklyPlanNeeded}`}
+                    color={weeklyPlanNeeded === 0 ? theme.success : theme.warning}
+                  />
+                </View>
+
+                <View style={{ marginTop: 14 }}>
+                  {weeklyPlan.map((item, index) => {
+                    const color = item.action === "Attend" ? theme.primary : theme.success;
+
+                    return (
+                      <View
+                        key={item.label}
+                        style={[recoveryStepRow, { borderBottomColor: theme.border }]}
+                      >
+                        <View style={[recoveryStepIcon, { backgroundColor: color + "22" }]}>
+                          <Ionicons
+                            name={item.action === "Attend" ? "school-outline" : "checkmark-circle-outline"}
+                            size={19}
+                            color={color}
+                          />
+                        </View>
+
+                        <View style={{ flex: 1 }}>
+                          <Text style={[recoveryStepTitle, { color: theme.text }]}>
+                            {item.label}: {item.action}
+                          </Text>
+                          <Text style={[mutedText, { color: theme.subtle }]}>
+                            {item.action === "Attend"
+                              ? "Mark this class present to improve recovery"
+                              : "Keep attending normally to protect margin"}
+                          </Text>
+                        </View>
+
+                        <Text style={{ color, fontWeight: "900", fontSize: 16 }}>
+                          {item.projected}%
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+
+                <View style={[recoveryTipBox, { backgroundColor: theme.input, borderColor: theme.border }]}>
+                  <Ionicons name="information-circle-outline" size={19} color={theme.info} />
+                  <Text style={[recoveryTipText, { color: theme.muted }]}>
+                    {weeklyPlanNeeded === 0
+                      ? "You are safe here. Missing classes will reduce this margin, so use the simulator before bunking."
+                      : `Try not to miss this subject until you complete ${weeklyPlanNeeded} attended class${
+                          weeklyPlanNeeded === 1 ? "" : "es"
+                        }.`}
+                  </Text>
+                </View>
+              </>
             ) : (
               <Text style={[simulatorAdvice, { color: theme.muted }]}>
-                Sync attendance to build a weekly plan.
+                Sync attendance to build a recovery plan.
               </Text>
             )}
           </View>
@@ -957,6 +1010,27 @@ function SimulatorBox({
   );
 }
 
+function RecoverySummaryBox({
+  title,
+  value,
+  color,
+}: {
+  title: string;
+  value: string;
+  color: string;
+}) {
+  const theme = useAppTheme();
+
+  return (
+    <View style={[recoverySummaryBox, { backgroundColor: theme.input, borderColor: theme.border }]}>
+      <Text style={[smallTitle, { color: theme.subtle }]}>{title}</Text>
+      <Text style={{ color, fontSize: 20, fontWeight: "900", marginTop: 6 }}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
 function AnalyticsMini({
   title,
   value,
@@ -1330,6 +1404,63 @@ const weeklyCard = {
   borderRadius: 28,
   borderWidth: 1,
   padding: 18,
+};
+
+const recoveryExplain = {
+  marginTop: 10,
+  lineHeight: 21,
+  fontWeight: "700" as const,
+};
+
+const recoverySummaryRow = {
+  flexDirection: "row" as const,
+  gap: 10,
+  marginTop: 14,
+};
+
+const recoverySummaryBox = {
+  flex: 1,
+  borderWidth: 1,
+  borderRadius: 18,
+  padding: 12,
+};
+
+const recoveryStepRow = {
+  flexDirection: "row" as const,
+  alignItems: "center" as const,
+  gap: 12,
+  paddingVertical: 13,
+  borderBottomWidth: 1,
+};
+
+const recoveryStepIcon = {
+  width: 38,
+  height: 38,
+  borderRadius: 14,
+  alignItems: "center" as const,
+  justifyContent: "center" as const,
+};
+
+const recoveryStepTitle = {
+  fontSize: 16,
+  fontWeight: "900" as const,
+};
+
+const recoveryTipBox = {
+  flexDirection: "row" as const,
+  alignItems: "flex-start" as const,
+  gap: 9,
+  borderWidth: 1,
+  borderRadius: 18,
+  padding: 13,
+  marginTop: 14,
+};
+
+const recoveryTipText = {
+  flex: 1,
+  fontSize: 12,
+  lineHeight: 18,
+  fontWeight: "700" as const,
 };
 
 const weekRow = {
