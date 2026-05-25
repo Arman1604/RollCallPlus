@@ -45,8 +45,8 @@ export default function LoginScreen() {
   const [showPrivacy, setShowPrivacy] = useState(false);
   const theme = useAppTheme();
   const isLight = theme.mode === "light";
-  const loginCardBackground = isLight ? "#ffffff" : theme.surface;
-  const loginInputBackground = isLight ? "#f8fafc" : theme.input;
+  const loginCardBackground = "#0f172a";
+  const loginInputBackground = "#f8fafc";
   const loginBorder = isLight ? "#e2e8f0" : theme.border;
 
   const setUserData = useAppStore.getState().setUserData;
@@ -278,7 +278,7 @@ export default function LoginScreen() {
         >
           <Animated.View entering={FadeInUp.duration(700)}>
             <View style={[brandMark, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-              <Image source={APP_LOGO} style={brandLogo} resizeMode="cover" />
+              <Image source={APP_LOGO} style={brandLogo} resizeMode="contain" />
             </View>
 
             <Text style={eyebrow}>WELCOME TO</Text>
@@ -303,8 +303,8 @@ export default function LoginScreen() {
           >
             <View style={cardHeader}>
               <View>
-                <Text style={[cardTitle, { color: theme.text }]}>Student Login</Text>
-                <Text style={[cardSubtitle, { color: theme.muted }]}>Use your AGC LMS credentials</Text>
+                <Text style={[cardTitle, { color: "#ffffff" }]}>Student Login</Text>
+                <Text style={[cardSubtitle, { color: "#94a3b8" }]}>Use your AGC LMS credentials</Text>
               </View>
 
               <TouchableOpacity
@@ -318,30 +318,30 @@ export default function LoginScreen() {
             </View>
 
             <View style={[inputShell, { backgroundColor: loginInputBackground, borderColor: loginBorder }]}>
-              <Ionicons name="id-card-outline" size={21} color={theme.subtle} />
+              <Ionicons name="id-card-outline" size={21} color="#64748b" />
 
               <TextInput
                 placeholder="Roll Number"
-                placeholderTextColor={theme.subtle}
+                placeholderTextColor="#64748b"
                 value={rollNumber}
                 onChangeText={setRollNumber}
                 autoCapitalize="none"
                 autoCorrect={false}
-                style={[inputText, { color: theme.text }]}
+                style={[inputText, { color: "#0f172a" }]}
               />
             </View>
 
             <View style={[inputShell, { marginBottom: 0, backgroundColor: loginInputBackground, borderColor: loginBorder }]}>
-              <Ionicons name="lock-closed-outline" size={21} color={theme.subtle} />
+              <Ionicons name="lock-closed-outline" size={21} color="#64748b" />
 
               <TextInput
                 placeholder="Password"
-                placeholderTextColor={theme.subtle}
+                placeholderTextColor="#64748b"
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
                 autoCorrect={false}
-                style={[inputText, { color: theme.text }]}
+                style={[inputText, { color: "#0f172a" }]}
               />
 
               <TouchableOpacity
@@ -352,7 +352,7 @@ export default function LoginScreen() {
                 <Ionicons
                   name={showPassword ? "eye-off-outline" : "eye-outline"}
                   size={21}
-                  color={theme.muted}
+                  color="#64748b"
                 />
               </TouchableOpacity>
             </View>
@@ -386,9 +386,9 @@ export default function LoginScreen() {
                 <Text style={privacyLinkText}>Privacy</Text>
               </TouchableOpacity>
 
-              <Text style={[footerDot, { color: theme.subtle }]}>•</Text>
+              <Text style={[footerDot, { color: "#64748b" }]}>•</Text>
 
-              <Text style={[footerText, { color: theme.subtle }]}>No selling or sharing</Text>
+              <Text style={[footerText, { color: "#94a3b8" }]}>No selling or sharing</Text>
             </View>
 
             {savedAccounts.length > 0 && (
@@ -543,9 +543,8 @@ const brandMark = {
 };
 
 const brandLogo = {
-  width: 160,
-  height: 160,
-  transform: [{ translateY: -2 }],
+  width: 58,
+  height: 58,
 };
 
 const eyebrow = {
