@@ -1,4 +1,5 @@
 import { Stack } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { ScrollView, Text, View } from "react-native";
 
 import BottomTabs from "../components/BottomTabs";
@@ -51,6 +52,13 @@ export default function TodayScreen() {
   const absentCount = todayData.filter(
     (item: any) => item.status === "ABSENT"
   ).length;
+  const markedCount = todayData.length;
+  const dailyStatus =
+    markedCount === 0
+      ? "Waiting for attendance"
+      : absentCount > 0
+      ? "Attendance needs attention"
+      : "All marked classes are present";
 
   return (
     <>
@@ -58,32 +66,40 @@ export default function TodayScreen() {
 
       <ScrollView style={{ flex: 1, backgroundColor: theme.background }}>
         <View style={{ padding: 20, paddingTop: 68, paddingBottom: 120 }}>
-          <View
-            style={{
-              position: "absolute",
-              width: 240,
-              height: 240,
-              borderRadius: 120,
-              backgroundColor: "#38bdf822",
-              top: -80,
-              right: -100,
-            }}
-          />
-
-          <Text style={eyebrow}>DAILY OVERVIEW</Text>
+          <Text style={[eyebrow, { color: theme.primary }]}>DAILY OVERVIEW</Text>
 
           <Text style={[title, { color: theme.text }]}>Today</Text>
 
           <Text style={[subtitle, { color: theme.muted }]}>Attendance activity for today</Text>
 
           <View style={[mainCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <Text style={[studentName, { color: theme.text }]}>{student?.name || "Student"}</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+              <View
+                style={[
+                  statusIcon,
+                  {
+                    backgroundColor: absentCount > 0 ? theme.danger + "22" : theme.primarySoft,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name={absentCount > 0 ? "alert-circle-outline" : "calendar-outline"}
+                  size={24}
+                  color={absentCount > 0 ? theme.danger : theme.primary}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[studentName, { color: theme.text }]}>{dailyStatus}</Text>
+                <Text style={[dateText, { color: theme.subtle }]}>
+                  {student?.name || "Student"} - {today}
+                </Text>
+              </View>
+            </View>
 
-            <Text style={[dateText, { color: theme.subtle }]}>{today}</Text>
-
-            <View style={{ flexDirection: "row", gap: 14, marginTop: 24 }}>
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 24 }}>
               <MiniCard title="Present" value={presentCount} color="#22c55e" />
               <MiniCard title="Absent" value={absentCount} color="#ef4444" />
+              <MiniCard title="Marked" value={markedCount} color={theme.info} />
             </View>
           </View>
 
@@ -92,7 +108,7 @@ export default function TodayScreen() {
           {todayData.length === 0 ? (
             <View style={[emptyCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
               <Text style={[emptyText, { color: theme.muted }]}>
-                No attendance updates found for today yet.
+                No attendance is marked yet today. Check again after class or refresh from Home.
               </Text>
             </View>
           ) : (
@@ -259,4 +275,12 @@ const miniTitle = {
   color: "#64748b",
   fontSize: 13,
   fontWeight: "800" as const,
+};
+
+const statusIcon = {
+  width: 50,
+  height: 50,
+  borderRadius: 18,
+  alignItems: "center" as const,
+  justifyContent: "center" as const,
 };

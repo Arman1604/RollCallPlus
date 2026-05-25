@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Ionicons } from "@expo/vector-icons";
 import { Stack, router } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -40,6 +41,11 @@ type Subject = {
   attended: number;
   total: number;
 };
+
+function getClassesNeededFor75(subject: Subject) {
+  if (percentage(subject.attended, subject.total) >= 75) return 0;
+  return Math.ceil((0.75 * subject.total - subject.attended) / 0.25);
+}
 
 export default function Dashboard() {
   const theme = useAppTheme();
@@ -201,15 +207,22 @@ export default function Dashboard() {
 
   const overall = percentage(totalAttended, totalLectures);
   const overallColor = getAttendanceColor(overall);
+  const riskSubjects = [...(subjects as Subject[])]
+    .filter((subject) => percentage(subject.attended, subject.total) < 75)
+    .sort(
+      (a, b) =>
+        percentage(a.attended, a.total) - percentage(b.attended, b.total)
+    );
+  const focusSubject = riskSubjects[0];
 
   const hour = new Date().getHours();
 
   const greeting =
     hour < 12
-      ? "Good Morning ☀️"
+      ? "Good Morning"
       : hour < 17
-      ? "Good Afternoon 🌤"
-      : "Good Evening 👋";
+      ? "Good Afternoon"
+      : "Good Evening";
 
   if (!student) {
     return (
@@ -277,6 +290,54 @@ export default function Dashboard() {
               </Text>
             </View>
 
+          </Animated.View>
+
+          <Animated.View
+            entering={FadeInDown.delay(80).duration(650)}
+            style={{
+              backgroundColor: theme.surface,
+              marginTop: 20,
+              borderRadius: 26,
+              padding: 18,
+              borderWidth: 1,
+              borderColor: focusSubject ? theme.warning : theme.success,
+            }}
+          >
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+              <View
+                style={{
+                  width: 46,
+                  height: 46,
+                  borderRadius: 16,
+                  backgroundColor: focusSubject
+                    ? theme.warning + "22"
+                    : theme.success + "22",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Ionicons
+                  name={focusSubject ? "alert-circle-outline" : "checkmark-circle-outline"}
+                  size={24}
+                  color={focusSubject ? theme.warning : theme.success}
+                />
+              </View>
+
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: theme.subtle, fontSize: 12, fontWeight: "900" }}>
+                  {focusSubject ? "PRIORITY TODAY" : "ATTENDANCE STATUS"}
+                </Text>
+                <Text style={{ color: theme.text, fontSize: 17, fontWeight: "900", marginTop: 4 }}>
+                  {focusSubject ? `Attend ${focusSubject.name}` : "All subjects are currently safe"}
+                </Text>
+              </View>
+            </View>
+
+            <Text style={{ color: theme.muted, marginTop: 12, lineHeight: 20, fontWeight: "700" }}>
+              {focusSubject
+                ? `${percentage(focusSubject.attended, focusSubject.total)}% attendance. Attend the next ${getClassesNeededFor75(focusSubject)} class${getClassesNeededFor75(focusSubject) === 1 ? "" : "es"} to reach 75%.`
+                : "Keep your attendance above 75%. Open AI before deciding to miss a class."}
+            </Text>
           </Animated.View>
 
           <Animated.View
@@ -406,7 +467,7 @@ export default function Dashboard() {
               {refreshing ? (
                 <ActivityIndicator color="white" />
               ) : (
-                <Text style={{ fontSize: 22 }}>🔄</Text>
+                <Ionicons name="sync-outline" size={25} color="white" />
               )}
             </TouchableOpacity>
           </Animated.View>
@@ -516,7 +577,7 @@ export default function Dashboard() {
                         </Text>
 
                         <Text style={{ color: theme.subtle, marginTop: 6 }}>
-                          {subject.attended} attended • {subject.total} total
+                          {subject.attended} attended - {subject.total} total
                         </Text>
                       </View>
 
