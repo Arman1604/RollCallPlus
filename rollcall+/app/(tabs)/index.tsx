@@ -6,7 +6,6 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -19,11 +18,10 @@ import {
 } from "react-native";
 
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
+import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Path, Stop } from "react-native-svg";
 import { useAppStore } from "../../store/useAppStore";
 import { useAppTheme } from "../../theme/useAppTheme";
 import { LOGIN_URL } from "../../utils/api";
-
-const APP_LOGO = require("../../assets/icon.png");
 
 type SavedAccount = {
   rollNumber: string;
@@ -45,9 +43,17 @@ export default function LoginScreen() {
   const [showPrivacy, setShowPrivacy] = useState(false);
   const theme = useAppTheme();
   const isLight = theme.mode === "light";
-  const loginCardBackground = "#0f172a";
-  const loginInputBackground = "#f8fafc";
-  const loginBorder = isLight ? "#e2e8f0" : theme.border;
+  const loginCardBackground = isLight ? theme.surface : "#0f172a";
+  const loginInputBackground = isLight ? theme.input : "#f8fafc";
+  const loginInputText = isLight ? theme.text : "#0f172a";
+  const loginInputIcon = isLight ? theme.subtle : "#64748b";
+  const loginBorder = theme.border;
+  const loginHeading = isLight ? theme.text : "#ffffff";
+  const loginMuted = isLight ? theme.muted : "#94a3b8";
+  const loginInfo = isLight ? theme.info : "#38bdf8";
+  const savedButtonBackground = isLight ? theme.primarySoft : "#7c3aed1f";
+  const savedButtonText = isLight ? theme.primary : "#c4b5fd";
+  const secureColor = isLight ? theme.success : "#22c55e";
 
   const setUserData = useAppStore.getState().setUserData;
 
@@ -95,7 +101,9 @@ export default function LoginScreen() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || "Saved login refresh failed");
+        const refreshError = new Error(data.message || "Saved login refresh failed");
+        (refreshError as Error & { status?: number }).status = response.status;
+        throw refreshError;
       }
 
       const refreshedAccount: SavedAccount = {
@@ -120,6 +128,25 @@ export default function LoginScreen() {
 
       router.replace("/dashboard");
     } catch (error) {
+      const status = (error as Error & { status?: number })?.status;
+
+      if (status === 401 || status === 403) {
+        console.log("Saved login rejected, removing cached account:", error);
+
+        const oldRaw = await AsyncStorage.getItem("rollcall_accounts");
+        const oldAccounts: SavedAccount[] = oldRaw ? JSON.parse(oldRaw) : [];
+        const updatedAccounts = oldAccounts.filter(
+          (acc) => acc.rollNumber !== account.rollNumber
+        );
+
+        await AsyncStorage.setItem("rollcall_accounts", JSON.stringify(updatedAccounts));
+        await AsyncStorage.removeItem("rollcall_user");
+        setSavedAccounts(updatedAccounts);
+
+        Alert.alert("Login Expired", "Please check your roll number and password, then login again.");
+        return;
+      }
+
       console.log("Saved login refresh failed, using cache:", error);
 
       setUserData({
@@ -277,8 +304,8 @@ export default function LoginScreen() {
           showsVerticalScrollIndicator={false}
         >
           <Animated.View entering={FadeInUp.duration(700)}>
-            <View style={[brandMark, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-              <Image source={APP_LOGO} style={brandLogo} resizeMode="contain" />
+            <View style={brandMark}>
+              <BrandLogo />
             </View>
 
             <Text style={eyebrow}>WELCOME TO</Text>
@@ -303,45 +330,51 @@ export default function LoginScreen() {
           >
             <View style={cardHeader}>
               <View>
-                <Text style={[cardTitle, { color: "#ffffff" }]}>Student Login</Text>
-                <Text style={[cardSubtitle, { color: "#94a3b8" }]}>Use your AGC LMS credentials</Text>
+                <Text style={[cardTitle, { color: loginHeading }]}>Student Login</Text>
+                <Text style={[cardSubtitle, { color: loginMuted }]}>Use your AGC LMS credentials</Text>
               </View>
 
               <TouchableOpacity
                 activeOpacity={0.86}
                 onPress={() => setShowPrivacy(true)}
-                style={secureBadge}
+                style={[
+                  secureBadge,
+                  isLight && {
+                    backgroundColor: "#dcfce7",
+                    borderColor: "#86efac",
+                  },
+                ]}
               >
-                <Ionicons name="shield-checkmark" size={17} color="#22c55e" />
-                <Text style={secureBadgeText}>Secure</Text>
+                <Ionicons name="shield-checkmark" size={17} color={secureColor} />
+                <Text style={[secureBadgeText, { color: isLight ? theme.success : "#86efac" }]}>Secure</Text>
               </TouchableOpacity>
             </View>
 
             <View style={[inputShell, { backgroundColor: loginInputBackground, borderColor: loginBorder }]}>
-              <Ionicons name="id-card-outline" size={21} color="#64748b" />
+              <Ionicons name="id-card-outline" size={21} color={loginInputIcon} />
 
               <TextInput
                 placeholder="Roll Number"
-                placeholderTextColor="#64748b"
+                placeholderTextColor={loginInputIcon}
                 value={rollNumber}
                 onChangeText={setRollNumber}
                 autoCapitalize="none"
                 autoCorrect={false}
-                style={[inputText, { color: "#0f172a" }]}
+                style={[inputText, { color: loginInputText }]}
               />
             </View>
 
             <View style={[inputShell, { marginBottom: 0, backgroundColor: loginInputBackground, borderColor: loginBorder }]}>
-              <Ionicons name="lock-closed-outline" size={21} color="#64748b" />
+              <Ionicons name="lock-closed-outline" size={21} color={loginInputIcon} />
 
               <TextInput
                 placeholder="Password"
-                placeholderTextColor="#64748b"
+                placeholderTextColor={loginInputIcon}
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
                 autoCorrect={false}
-                style={[inputText, { color: "#0f172a" }]}
+                style={[inputText, { color: loginInputText }]}
               />
 
               <TouchableOpacity
@@ -352,7 +385,7 @@ export default function LoginScreen() {
                 <Ionicons
                   name={showPassword ? "eye-off-outline" : "eye-outline"}
                   size={21}
-                  color="#64748b"
+                  color={loginInputIcon}
                 />
               </TouchableOpacity>
             </View>
@@ -382,23 +415,23 @@ export default function LoginScreen() {
                 onPress={() => setShowPrivacy(true)}
                 style={privacyLink}
               >
-                <Ionicons name="lock-closed-outline" size={15} color="#38bdf8" />
-                <Text style={privacyLinkText}>Privacy</Text>
+                <Ionicons name="lock-closed-outline" size={15} color={loginInfo} />
+                <Text style={[privacyLinkText, { color: loginInfo }]}>Privacy</Text>
               </TouchableOpacity>
 
               <Text style={[footerDot, { color: "#64748b" }]}>•</Text>
 
-              <Text style={[footerText, { color: "#94a3b8" }]}>No selling or sharing</Text>
+              <Text style={[footerText, { color: loginMuted }]}>No selling or sharing</Text>
             </View>
 
             {savedAccounts.length > 0 && (
               <TouchableOpacity
                 activeOpacity={0.86}
                 onPress={openSavedAccounts}
-                style={savedAccountButtonLite}
+                style={[savedAccountButtonLite, { backgroundColor: savedButtonBackground }]}
               >
-                <Ionicons name="people-outline" size={18} color="#c4b5fd" />
-                <Text style={savedAccountTitleLite}>Switch saved account</Text>
+                <Ionicons name="people-outline" size={18} color={savedButtonText} />
+                <Text style={[savedAccountTitleLite, { color: savedButtonText }]}>Switch saved account</Text>
               </TouchableOpacity>
             )}
           </Animated.View>
@@ -525,26 +558,69 @@ function PrivacyPoint({ text }: { text: string }) {
   );
 }
 
+function BrandLogo() {
+  return (
+    <Svg width={70} height={70} viewBox="0 0 72 72">
+      <Defs>
+        <SvgLinearGradient id="brandGradient" x1="0" y1="0" x2="1" y2="1">
+          <Stop offset="0" stopColor="#2563eb" />
+          <Stop offset="0.52" stopColor="#06b6d4" />
+          <Stop offset="1" stopColor="#84cc16" />
+        </SvgLinearGradient>
+      </Defs>
+
+      <Path
+        d="M17 38V22a5 5 0 0 1 5-5h8a6 6 0 0 1 12 0h8a5 5 0 0 1 5 5v16"
+        fill="none"
+        stroke="url(#brandGradient)"
+        strokeWidth={4}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M27 17h18v7H27z"
+        fill="url(#brandGradient)"
+        stroke="url(#brandGradient)"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="m25 31 4 4 7-8"
+        fill="none"
+        stroke="#22c55e"
+        strokeWidth={3.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M41 29h7M41 35h7"
+        fill="none"
+        stroke="#06b6d4"
+        strokeWidth={3}
+        strokeLinecap="round"
+      />
+      <Circle cx={36} cy={43} r={7} fill="url(#brandGradient)" />
+      <Circle cx={22} cy={46} r={5.5} fill="#38bdf8" />
+      <Circle cx={50} cy={46} r={5.5} fill="#84cc16" />
+      <Path
+        d="M24 62c1-8 6-12 12-12s11 4 12 12"
+        fill="url(#brandGradient)"
+      />
+      <Path d="M12 60c1-6 5-9 10-9 2 0 4 .5 5 1.5-3 2.5-4.5 5.5-5 9.5z" fill="#38bdf8" />
+      <Path d="M60 60c-1-6-5-9-10-9-2 0-4 .5-5 1.5 3 2.5 4.5 5.5 5 9.5z" fill="#84cc16" />
+    </Svg>
+  );
+}
+
 const brandMark = {
-  width: 72,
-  height: 72,
-  borderRadius: 24,
-  backgroundColor: "#0f172a",
-  borderWidth: 1,
-  borderColor: "#1e293b",
+  width: 70,
+  height: 70,
   justifyContent: "center" as const,
   alignItems: "center" as const,
   marginBottom: 18,
-  overflow: "hidden" as const,
   shadowColor: "#38bdf8",
-  shadowOpacity: 0.16,
-  shadowRadius: 18,
-  elevation: 8,
-};
-
-const brandLogo = {
-  width: 58,
-  height: 58,
+  shadowOpacity: 0.18,
+  shadowRadius: 14,
+  elevation: 3,
 };
 
 const eyebrow = {

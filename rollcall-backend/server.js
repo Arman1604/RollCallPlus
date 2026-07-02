@@ -87,6 +87,40 @@ function getValueByLabel($, labelName) {
   return "Not Available";
 }
 
+function hasRealProfileData(profileData = {}) {
+  return Object.values(profileData).some(
+    (value) => cleanValue(value) !== "Not Available"
+  );
+}
+
+function hasRealAttendanceData(attendance = []) {
+  return attendance.some(
+    (subject) =>
+      cleanValue(subject?.name) !== "Not Available" ||
+      Number(subject?.attended || 0) > 0 ||
+      Number(subject?.total || 0) > 0
+  );
+}
+
+function hasRealResultData(resultData = {}) {
+  const current = resultData.current || resultData;
+
+  return (
+    current?.available === true ||
+    Number(current?.sgpa || 0) > 0 ||
+    (Array.isArray(current?.subjects) && current.subjects.length > 0) ||
+    (Array.isArray(resultData.results) && resultData.results.length > 0)
+  );
+}
+
+function hasVerifiedStudentData(studentName, profileData, attendance, resultData) {
+  return (
+    hasRealProfileData(profileData) ||
+    hasRealAttendanceData(attendance) ||
+    hasRealResultData(resultData)
+  );
+}
+
 function extractProfileData($) {
   const className = getValueByLabel($, "Class Name");
   const batch = getValueByLabel($, "Batch");
@@ -632,6 +666,11 @@ app.post("/login", async (req, res) => {
       }),
     ]);
 
+    if (!hasVerifiedStudentData(studentName, profileData, attendance, resultData)) {
+      return res.status(401).json({
+        message: "Invalid roll number or password",
+      });
+    }
     const payload = {
       student: {
         name: studentName,

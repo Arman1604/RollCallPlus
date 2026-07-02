@@ -429,6 +429,40 @@ function getValueByLabel($, labelName) {
   return "Not Available";
 }
 
+function hasRealProfileData(profileData = {}) {
+  return Object.values(profileData).some(
+    (value) => cleanValue(value) !== "Not Available"
+  );
+}
+
+function hasRealAttendanceData(attendance = []) {
+  return attendance.some(
+    (subject) =>
+      cleanValue(subject?.name) !== "Not Available" ||
+      Number(subject?.attended || 0) > 0 ||
+      Number(subject?.total || 0) > 0
+  );
+}
+
+function hasRealResultData(resultData = {}) {
+  const current = resultData.current || resultData;
+
+  return (
+    current?.available === true ||
+    Number(current?.sgpa || 0) > 0 ||
+    (Array.isArray(current?.subjects) && current.subjects.length > 0) ||
+    (Array.isArray(resultData.results) && resultData.results.length > 0)
+  );
+}
+
+function hasVerifiedStudentData(studentName, profileData, attendance, resultData) {
+  return (
+    hasRealProfileData(profileData) ||
+    hasRealAttendanceData(attendance) ||
+    hasRealResultData(resultData)
+  );
+}
+
 function extractProfileData($) {
   const className = getValueByLabel($, "Class Name");
   const batch = getValueByLabel($, "Batch");
@@ -1319,6 +1353,22 @@ async function scrapeLogin(payload) {
       };
     }),
   ]);
+
+  if (!hasVerifiedStudentData(studentName, profileData, attendance, resultData)) {
+    logEvent("warn", "login.empty_portal_data", {
+      requestId,
+      rollNumber,
+      route: "/login",
+      runtime: "cloudflare-native",
+    });
+
+    return json(
+      { message: "Invalid roll number or password" },
+      401,
+      {},
+      requestId
+    );
+  }
 
   const responsePayload = {
     student: {
